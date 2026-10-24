@@ -114,6 +114,14 @@
 .oxf-category-legend>div>div span:last-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .oxf-category-legend strong { font-variant-numeric:tabular-nums; font-size:11px; }
 .oxf-category-marker { width:8px; height:8px; flex:0 0 auto; border-radius:3px; }
+.oxf-category-marker.is-color-1 { background-color:#7c6cf2; }
+.oxf-category-marker.is-color-2 { background-color:#4f8fe8; }
+.oxf-category-marker.is-color-3 { background-color:#39a58a; }
+.oxf-category-marker.is-color-4 { background-color:#e5a83e; }
+.oxf-category-marker.is-color-5 { background-color:#dc6f57; }
+.oxf-category-marker.is-color-6 { background-color:#a86dd4; }
+.oxf-category-marker.is-color-7 { background-color:#58a6b3; }
+.oxf-category-marker.is-color-8 { background-color:#87909a; }
 .oxf-accounts-snapshot>.oxf-card-heading>button { color:var(--oxf-accent); border:0; background:transparent; box-shadow:none; font-size:12px; cursor:pointer; }
 .oxf-snapshot-list { display:grid; gap:4px; margin-top:16px; }
 .oxf-snapshot-list>div { display:grid; grid-template-columns:28px minmax(0,1fr) auto; gap:10px; align-items:center; min-height:32px; font-size:12px; }

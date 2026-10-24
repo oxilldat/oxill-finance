@@ -2,6 +2,10 @@
 
 All notable changes to Oxill Finance are documented in this file.
 
+## 1.0.2 — 2026-10-24
+
+- Moved category legend colors from an inline CSS property to fixed CSS classes.
+
 ## 1.0.1 — 2026-10-24
 
 - Fixed Obsidian community scanner errors for view cleanup and static style assignment.

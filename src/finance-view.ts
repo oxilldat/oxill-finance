@@ -284,8 +284,7 @@ export class FinanceView extends ItemView {
     slices.forEach((slice, index) => {
       const row = legend.createDiv();
       const label = row.createDiv();
-      const marker = label.createSpan({ cls: "oxf-category-marker" });
-      marker.setCssProps({ "background-color": colors[index] ?? colors[0] ?? "#7c6cf2" });
+      label.createSpan({ cls: `oxf-category-marker is-color-${index + 1}` });
       label.createSpan({ text: slice.name });
       row.createEl("strong", { text: `${Math.round(slice.share * 100)}%` });
     });
