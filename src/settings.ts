@@ -1,4 +1,4 @@
-import { App, Modal, Notice, PluginSettingTab, Setting } from "obsidian";
+import { App, Modal, Notice, PluginSettingTab, Setting, SettingDefinitionItem } from "obsidian";
 
 import type OxillFinancePlugin from "./main";
 import authorAvatar from "../assets/ava.jpg";
@@ -17,44 +17,66 @@ export const DEFAULT_SETTINGS: OxillFinanceSettings = {
 export class FinanceSettingTab extends PluginSettingTab {
   constructor(app: App, private readonly plugin: OxillFinancePlugin) { super(app, plugin); }
 
-  display(): void {
-    const { containerEl } = this;
-    containerEl.empty();
-    containerEl.addClass("oxf-finance-settings");
-
-    const interfaceSettings = this.createPlainGroup(containerEl);
-    new Setting(interfaceSettings)
-      .setName(t("Язык", "Language"))
-      .setDesc(t("Язык интерфейса Oxill Finance.", "Oxill Finance interface language."))
-      .addDropdown((dropdown) => dropdown
-        .addOption("ru", "Русский")
-        .addOption("en", "English")
-        .setValue(this.plugin.settings.language)
-        .onChange(async (value) => {
-          this.plugin.settings.language = value === "en" ? "en" : "ru";
-          setFinanceLocale(this.plugin.settings.language);
-          await this.plugin.saveFinanceSettings();
-          this.display();
-        }));
-
-    const categoryManager = this.createPlainGroup(containerEl);
-    new Setting(categoryManager)
-      .setName(t("Управление категориями", "Manage categories"))
-      .setDesc(t("Добавляйте категории заранее и переносите заметки при удалении.", "Create categories in advance and move notes when deleting them."))
-      .addButton((button) => button.setButtonText(t("Открыть", "Open")).setCta().onClick(() => this.openCategoryManager()));
-
-    const overviewCategories = this.createPlainGroup(containerEl);
+  getSettingDefinitions(): SettingDefinitionItem[] {
     const selectedCount = this.plugin.settings.selectedCategories.length;
-    new Setting(overviewCategories)
-      .setName(selectedCount === 0 ? t("Автоматический выбор", "Automatic selection") : t("Ручной выбор", "Manual selection"))
-      .setDesc(selectedCount === 0
-        ? t("Сейчас диаграмма сама показывает крупнейшие категории по расходам.", "The chart currently shows the largest expense categories automatically.")
-        : t(`Выбрано вручную: ${selectedCount} из 7.`, `Selected manually: ${selectedCount} of 7.`))
-      .addButton((button) => button
-        .setButtonText(t("Настроить", "Configure"))
-        .setCta()
-        .onClick(() => this.openOverviewCategories()));
-    this.renderAuthorCard(containerEl);
+    return [
+      {
+        type: "group",
+        cls: "oxf-finance-settings-group",
+        items: [{
+          name: t("Язык", "Language"),
+          desc: t("Язык интерфейса Oxill Finance.", "Oxill Finance interface language."),
+          render: (setting) => {
+            setting.addDropdown((dropdown) => dropdown
+              .addOption("ru", "Русский")
+              .addOption("en", "English")
+              .setValue(this.plugin.settings.language)
+              .onChange(async (value) => {
+                this.plugin.settings.language = value === "en" ? "en" : "ru";
+                setFinanceLocale(this.plugin.settings.language);
+                await this.plugin.saveFinanceSettings();
+                this.update();
+              }));
+          },
+        }],
+      },
+      {
+        type: "group",
+        cls: "oxf-finance-settings-group",
+        items: [{
+          name: t("Управление категориями", "Manage categories"),
+          desc: t("Добавляйте категории заранее и переносите заметки при удалении.", "Create categories in advance and move notes when deleting them."),
+          render: (setting) => {
+            setting.addButton((button) => button.setButtonText(t("Открыть", "Open")).setCta().onClick(() => this.openCategoryManager()));
+          },
+        }],
+      },
+      {
+        type: "group",
+        cls: "oxf-finance-settings-group",
+        items: [{
+          name: selectedCount === 0 ? t("Автоматический выбор", "Automatic selection") : t("Ручной выбор", "Manual selection"),
+          desc: selectedCount === 0
+            ? t("Сейчас диаграмма сама показывает крупнейшие категории по расходам.", "The chart currently shows the largest expense categories automatically.")
+            : t(`Выбрано вручную: ${selectedCount} из 7.`, `Selected manually: ${selectedCount} of 7.`),
+          render: (setting) => {
+            setting.addButton((button) => button
+              .setButtonText(t("Настроить", "Configure"))
+              .setCta()
+              .onClick(() => this.openOverviewCategories()));
+          },
+        }],
+      },
+      {
+        name: t("Автор и поддержка", "Author and support"),
+        searchable: false,
+        render: (setting) => {
+          setting.settingEl.empty();
+          setting.settingEl.addClass("oxf-finance-author-setting");
+          this.renderAuthorCard(setting.settingEl);
+        },
+      },
+    ];
   }
 
   private openCategoryManager(): void {
@@ -133,7 +155,7 @@ export class FinanceSettingTab extends PluginSettingTab {
         this.plugin.settings.selectedCategories = [];
         await this.plugin.saveFinanceSettings();
         refresh();
-        this.display();
+        this.update();
       }));
     const categories = this.plugin.getAvailableCategories();
     if (categories.length === 0) {
@@ -157,7 +179,7 @@ export class FinanceSettingTab extends PluginSettingTab {
             : selected.filter((name) => name !== category);
           await this.plugin.saveFinanceSettings();
           refresh();
-          this.display();
+          this.update();
         }));
     }
   }
@@ -174,13 +196,8 @@ export class FinanceSettingTab extends PluginSettingTab {
     new DeleteCategoryModal(this.app, category, targets, async (target) => {
       await this.plugin.mergeCategory(category, target);
       refresh();
-      this.display();
+      this.update();
     }).open();
-  }
-
-  private createPlainGroup(container: HTMLElement): HTMLElement {
-    const group = container.createDiv({ cls: "setting-group oxf-finance-settings-group" });
-    return group.createDiv({ cls: "setting-items" });
   }
 
   private renderAuthorCard(container: HTMLElement): void {

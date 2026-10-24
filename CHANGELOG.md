@@ -2,6 +2,14 @@
 
 All notable changes to Oxill Finance are documented in this file.
 
+## 1.0.1 — 2026-10-24
+
+- Fixed Obsidian community scanner errors for view cleanup and static style assignment.
+- Migrated settings to the Obsidian 1.13 declarative settings API.
+- Made note deletion respect the user's configured trash preference.
+- Hardened frontmatter access and removed unnecessary type assertions.
+- Added GitHub release automation with signed artifact provenance attestations.
+
 ## 1.0.0 — 2026-10-24
 
 - Added a responsive financial overview with configurable periods and custom date ranges.

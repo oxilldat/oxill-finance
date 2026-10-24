@@ -276,7 +276,7 @@ export class FinanceView extends ItemView {
       cursor += slice.share * 100;
       return `${colors[index] ?? colors[0]} ${start}% ${cursor}%`;
     });
-    donut.style.background = `conic-gradient(${stops.join(",")})`;
+    donut.setCssProps({ background: `conic-gradient(${stops.join(",")})` });
     const center = donut.createDiv();
     center.createSpan({ text: t("Расходы", "Expenses") });
     center.createEl("strong", { text: `${money(summary.expense)} ₽` });
@@ -285,7 +285,7 @@ export class FinanceView extends ItemView {
       const row = legend.createDiv();
       const label = row.createDiv();
       const marker = label.createSpan({ cls: "oxf-category-marker" });
-      marker.style.backgroundColor = colors[index] ?? colors[0] ?? "#7c6cf2";
+      marker.setCssProps({ "background-color": colors[index] ?? colors[0] ?? "#7c6cf2" });
       label.createSpan({ text: slice.name });
       row.createEl("strong", { text: `${Math.round(slice.share * 100)}%` });
     });
@@ -331,7 +331,7 @@ export class FinanceView extends ItemView {
       for (const kind of ["expense", "income"] as const) {
         if (bucket[kind] <= 0) continue;
         const bar = bars.createDiv({ cls: `is-${kind}` });
-        bar.style.height = `${(bucket[kind] / max) * 100}%`;
+        bar.setCssProps({ height: `${(bucket[kind] / max) * 100}%` });
         bar.setAttribute("title", `${kind === "income" ? t("Доходы", "Income") : t("Расходы", "Expenses")}: ${money(bucket[kind])} ₽`);
       }
       column.createSpan({ text: bucket.label });
@@ -435,7 +435,7 @@ export class FinanceView extends ItemView {
     }
     if (categories.length === 0) {
       const empty = grid.createDiv({ cls: "oxf-planning-map-empty", text: t("Категории появятся после добавления расходов или планов", "Categories will appear after you add expenses or plans") });
-      empty.style.gridColumn = "1 / -1";
+      empty.addClass("oxf-planning-map-empty-wide");
       this.renderPlanningInspector(container, plans);
       return;
     }
@@ -490,7 +490,7 @@ export class FinanceView extends ItemView {
         const column = chart.createDiv();
         const value = monthly[month] ?? 0;
         const bar = column.createDiv({ cls: value > 0 ? "has-value" : "", attr: { title: `${money(value)} ₽` } });
-        bar.style.height = value > 0 ? `${(value / max) * 100}%` : "0";
+        bar.setCssProps({ height: value > 0 ? `${(value / max) * 100}%` : "0" });
         column.createSpan({ text: monthLabels[month] ?? "" });
       }
       return;
@@ -537,7 +537,7 @@ export class FinanceView extends ItemView {
     card.createSpan({ cls: "oxf-account-icon", text: account.icon });
     const identity = card.createDiv({ cls: "oxf-account-identity" });
     identity.createEl("strong", { text: account.name });
-    identity.createEl("span", { text: account.balance === 0 ? t("Нет средств", "No funds") : t("Доступно сейчас", "Available now") });
+    identity.createSpan({ text: account.balance === 0 ? t("Нет средств", "No funds") : t("Доступно сейчас", "Available now") });
     card.createEl("strong", { cls: `oxf-account-balance${account.balance < 0 ? " is-negative" : ""}`, text: `${money(account.balance)} ₽` });
     const transfer = card.createEl("button", { cls: "oxf-account-transfer", text: t("Перевести", "Transfer"), attr: { type: "button" } });
     transfer.disabled = accountCount < 2 || account.balance <= 0;
@@ -581,9 +581,9 @@ export class FinanceView extends ItemView {
       const row = list.createEl("button", { cls: "oxf-history-row", attr: { type: "button" } });
       const name = row.createDiv();
       name.createEl("strong", { text: transaction.category });
-      name.createEl("span", { text: transaction.comment ?? transaction.file.basename });
+      name.createSpan({ text: transaction.comment ?? transaction.file.basename });
       row.createEl("time", { text: dateLabel(transaction.date) });
-      row.createEl("span", { text: transaction.kind === "income" ? t("Доход", "Income") : t("Расход", "Expense") });
+      row.createSpan({ text: transaction.kind === "income" ? t("Доход", "Income") : t("Расход", "Expense") });
       row.createEl("b", { cls: `is-${transaction.kind}`, text: `${transaction.kind === "income" ? "+" : "−"}${money(transaction.amount)} ₽` });
       row.addEventListener("click", () => void this.app.workspace.getLeaf(false).openFile(transaction.file));
     }

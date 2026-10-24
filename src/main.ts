@@ -46,7 +46,6 @@ export default class OxillFinancePlugin extends Plugin {
 
   onunload(): void {
     if (this.refreshTimer !== undefined) window.clearTimeout(this.refreshTimer);
-    this.app.workspace.detachLeavesOfType(VIEW_TYPE_FINANCE);
   }
 
   private async activateView(): Promise<void> {

@@ -83,14 +83,14 @@ export class TransactionStore {
 
   async updateAccount(account: FinanceAccount, input: NewAccount): Promise<void> {
     await this.app.fileManager.processFrontMatter(account.file, (data) => {
-      data.account_name = input.name;
-      data.icon = input.icon;
+      setFrontmatterValue(data, "account_name", input.name);
+      setFrontmatterValue(data, "icon", input.icon);
     });
   }
 
   async deleteAccount(account: FinanceAccount): Promise<void> {
     if (Math.abs(account.balance) > 0.005) throw new Error(t("Сначала переведите все средства на другой счёт", "Transfer all funds to another account first"));
-    await this.app.vault.delete(account.file);
+    await this.app.fileManager.trashFile(account.file);
   }
 
   async createTransfer(input: NewTransfer): Promise<string> {
@@ -126,18 +126,18 @@ export class TransactionStore {
 
   async updateExpensePlan(plan: ExpensePlan, input: NewExpensePlan): Promise<void> {
     await this.app.fileManager.processFrontMatter(plan.file, (data) => {
-      data.title = input.title;
-      data.amount = input.amount;
-      data.due_date = input.dueDate.toISOString();
-      data.category = input.category;
-      data.completion = input.completion;
-      if (input.accountId) data.account_id = input.accountId;
-      else delete data.account_id;
+      setFrontmatterValue(data, "title", input.title);
+      setFrontmatterValue(data, "amount", input.amount);
+      setFrontmatterValue(data, "due_date", input.dueDate.toISOString());
+      setFrontmatterValue(data, "category", input.category);
+      setFrontmatterValue(data, "completion", input.completion);
+      if (input.accountId) setFrontmatterValue(data, "account_id", input.accountId);
+      else deleteFrontmatterValue(data, "account_id");
     });
   }
 
   async deleteExpensePlan(plan: ExpensePlan): Promise<void> {
-    await this.app.vault.delete(plan.file);
+    await this.app.fileManager.trashFile(plan.file);
   }
 
   async completeExpensePlan(plan: ExpensePlan): Promise<void> {
@@ -153,8 +153,8 @@ export class TransactionStore {
         });
       }
       await this.app.fileManager.processFrontMatter(plan.file, (data) => {
-        data.status = "paid";
-        data.paid_at = new Date().toISOString();
+        setFrontmatterValue(data, "status", "paid");
+        setFrontmatterValue(data, "paid_at", new Date().toISOString());
       });
     } catch (error) {
       plan.status = "planned";
@@ -167,12 +167,13 @@ export class TransactionStore {
       throw new Error(t("Выберите другую категорию для переноса", "Select a different destination category"));
     }
     const files = this.app.vault.getMarkdownFiles().filter((file) => {
-      const data = this.app.metadataCache.getFileCache(file)?.frontmatter as Frontmatter | undefined;
+      const data = toFrontmatter(this.app.metadataCache.getFileCache(file)?.frontmatter);
       return typeof data?.finance_type === "string" && data.category === source;
     });
     for (const file of files) {
       await this.app.fileManager.processFrontMatter(file, (data) => {
-        if (data.category === source) data.category = target;
+        const frontmatter = toFrontmatter(data);
+        if (frontmatter?.category === source) frontmatter.category = target;
       });
     }
     this.refresh();
@@ -188,7 +189,7 @@ export function readFinanceIndex(app: App): FinanceIndex {
   const plans: ExpensePlan[] = [];
   const issues: FinanceIndex["issues"] = [];
   for (const file of app.vault.getMarkdownFiles()) {
-    const data = app.metadataCache.getFileCache(file)?.frontmatter as Frontmatter | undefined;
+    const data = toFrontmatter(app.metadataCache.getFileCache(file)?.frontmatter);
     try {
       if (data?.finance_type === "transaction") transactions.push(parseTransaction(file, data));
       else if (data?.finance_type === "account") accounts.push(parseAccount(file, data));
@@ -285,6 +286,24 @@ function requiredString(value: unknown, field: string): string {
 
 function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function toFrontmatter(value: unknown): Frontmatter | undefined {
+  return isFrontmatter(value) ? value : undefined;
+}
+
+function isFrontmatter(value: unknown): value is Frontmatter {
+  return typeof value === "object" && value !== null;
+}
+
+function setFrontmatterValue(data: unknown, key: string, value: unknown): void {
+  const frontmatter = toFrontmatter(data);
+  if (frontmatter) frontmatter[key] = value;
+}
+
+function deleteFrontmatterValue(data: unknown, key: string): void {
+  const frontmatter = toFrontmatter(data);
+  if (frontmatter) delete frontmatter[key];
 }
 
 async function ensureFolder(app: App, folder: string): Promise<void> {
