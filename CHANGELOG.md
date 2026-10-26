@@ -2,6 +2,10 @@
 
 All notable changes to Oxill Finance are documented in this file.
 
+## 1.0.4 — 2026-10-26
+
+- Removed the duplicate background and spacing from the author contact card.
+
 ## 1.0.3 — 2026-10-26
 
 - Made the author card compact and aligned it with the settings cards.
