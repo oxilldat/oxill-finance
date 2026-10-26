@@ -2,6 +2,12 @@
 
 All notable changes to Oxill Finance are documented in this file.
 
+## 1.0.3 — 2026-10-26
+
+- Made the author card compact and aligned it with the settings cards.
+- Normalized the action button widths in the settings screen.
+- Fixed the sizing and alignment of the social buttons on desktop and mobile.
+
 ## 1.0.2 — 2026-10-24
 
 - Moved category legend colors from an inline CSS property to fixed CSS classes.
