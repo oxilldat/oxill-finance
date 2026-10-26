@@ -25,11 +25,17 @@ export interface NewExpensePlan {
   completion: ExpensePlanCompletion;
 }
 
+export interface FinanceStorageFolders {
+  operations: string;
+  accounts: string;
+  planning: string;
+}
+
 export class TransactionStore {
   private index: FinanceIndex = { transactions: [], accounts: [], transfers: [], plans: [], issues: [] };
   private listeners = new Set<() => void>();
 
-  constructor(private readonly app: App, private readonly folder = "Финансы/Операции") {}
+  constructor(private readonly app: App, private readonly getFolders: () => FinanceStorageFolders) {}
 
   refresh(): void {
     this.index = readFinanceIndex(this.app);
@@ -46,7 +52,8 @@ export class TransactionStore {
   }
 
   async createTransaction(input: NewTransaction): Promise<string> {
-    await ensureFolder(this.app, this.folder);
+    const folder = this.getFolders().operations;
+    await ensureFolder(this.app, folder);
     const id = `tx-${formatIdDate(input.date)}-${Math.random().toString(36).slice(2, 6)}`;
     const content = [
       "---",
@@ -63,13 +70,13 @@ export class TransactionStore {
       `# ${input.kind === "income" ? t("Доход", "Income") : t("Расход", "Expense")}: ${input.category}`,
       "",
     ].join("\n");
-    const path = normalizePath(`${this.folder}/${id}.md`);
+    const path = normalizePath(`${folder}/${id}.md`);
     await this.app.vault.create(path, content);
     return path;
   }
 
   async createAccount(input: NewAccount): Promise<string> {
-    const folder = "Финансы/Счета";
+    const folder = this.getFolders().accounts;
     await ensureFolder(this.app, folder);
     const id = `account-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
     const content = [
@@ -94,7 +101,8 @@ export class TransactionStore {
   }
 
   async createTransfer(input: NewTransfer): Promise<string> {
-    await ensureFolder(this.app, this.folder);
+    const folder = this.getFolders().operations;
+    await ensureFolder(this.app, folder);
     const id = `transfer-${formatIdDate(input.date)}-${Math.random().toString(36).slice(2, 6)}`;
     const content = [
       "---", "finance_type: transfer", `finance_id: ${quote(id)}`, "operation: transfer",
@@ -103,13 +111,13 @@ export class TransactionStore {
       ...(input.comment ? [`comment: ${quote(input.comment)}`] : []),
       "---", "", `# ${t("Перевод между счетами", "Transfer between accounts")}`, "",
     ].join("\n");
-    const path = normalizePath(`${this.folder}/${id}.md`);
+    const path = normalizePath(`${folder}/${id}.md`);
     await this.app.vault.create(path, content);
     return path;
   }
 
   async createExpensePlan(input: NewExpensePlan): Promise<string> {
-    const folder = "Финансы/Планирование";
+    const folder = this.getFolders().planning;
     await ensureFolder(this.app, folder);
     const id = `plan-${formatIdDate(input.dueDate)}-${Math.random().toString(36).slice(2, 6)}`;
     const content = [

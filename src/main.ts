@@ -3,10 +3,10 @@ import { Notice, Plugin, WorkspaceLeaf } from "obsidian";
 import { AccountModal, DeleteAccountModal, TransferModal } from "./account-modals";
 import { FinanceView, VIEW_TYPE_FINANCE } from "./finance-view";
 import { TransactionModal } from "./transaction-modal";
-import { TransactionStore } from "./transaction-store";
+import { FinanceStorageFolders, TransactionStore } from "./transaction-store";
 import { DeleteExpensePlanModal, ExpensePlanModal } from "./planning-modal";
 import { ExpensePlan, FinanceAccount, TransactionKind } from "./types";
-import { DEFAULT_SETTINGS, FinanceSettingTab, OxillFinanceSettings } from "./settings";
+import { DEFAULT_SETTINGS, FinanceSettingTab, normalizeFinanceSettings, OxillFinanceSettings } from "./settings";
 import { setFinanceLocale, t } from "./i18n";
 
 export default class OxillFinancePlugin extends Plugin {
@@ -15,9 +15,9 @@ export default class OxillFinancePlugin extends Plugin {
   settings: OxillFinanceSettings = DEFAULT_SETTINGS;
 
   async onload(): Promise<void> {
-    this.settings = { ...DEFAULT_SETTINGS, ...(await this.loadData() as Partial<OxillFinanceSettings> | null) };
+    this.settings = normalizeFinanceSettings({ ...DEFAULT_SETTINGS, ...(await this.loadData() as Partial<OxillFinanceSettings> | null) });
     setFinanceLocale(this.settings.language);
-    this.store = new TransactionStore(this.app);
+    this.store = new TransactionStore(this.app, () => this.getStorageFolders());
     this.registerView(VIEW_TYPE_FINANCE, (leaf) => new FinanceView(leaf, this.store, {
       openTransaction: (kind, accountId) => this.openTransactionModal(kind, accountId),
       createAccount: () => new AccountModal(this.app, this.store, () => this.scheduleRefresh(120)).open(),
@@ -109,7 +109,16 @@ export default class OxillFinancePlugin extends Plugin {
   }
 
   async saveFinanceSettings(): Promise<void> {
+    this.settings = normalizeFinanceSettings(this.settings);
     await this.saveData(this.settings);
     this.store.refresh();
+  }
+
+  private getStorageFolders(): FinanceStorageFolders {
+    return {
+      operations: this.settings.operationsFolder,
+      accounts: this.settings.accountsFolder,
+      planning: this.settings.planningFolder,
+    };
   }
 }

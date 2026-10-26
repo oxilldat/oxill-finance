@@ -2,6 +2,12 @@
 
 All notable changes to Oxill Finance are documented in this file.
 
+## 1.0.5 — 2026-10-26
+
+- Added separate storage folder settings for operations, accounts, and planned expenses.
+- Kept existing finance notes discoverable after changing a destination folder.
+- Added safe defaults and path normalization for migrated or incomplete settings.
+
 ## 1.0.4 — 2026-10-26
 
 - Removed the duplicate background and spacing from the author contact card.

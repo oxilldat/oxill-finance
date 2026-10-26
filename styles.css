@@ -283,6 +283,9 @@
   width:112px;
   justify-content:center;
 }
+.oxf-finance-storage-settings input[type="text"] {
+  width:min(280px,38vw);
+}
 .oxf-finance-settings-empty .setting-item-name { color:var(--text-muted); }
 .oxf-finance-author-setting {
   min-height:0;
@@ -361,6 +364,7 @@
     align-items:flex-start;
     gap:12px;
   }
+  .oxf-finance-storage-settings input[type="text"] { width:min(210px,46vw); }
   .oxf-finance-author-card { gap:12px; padding:0; }
   .oxf-finance-author-top { gap:10px; }
   .oxf-finance-author-avatar { width:44px; height:44px; flex-basis:44px; }

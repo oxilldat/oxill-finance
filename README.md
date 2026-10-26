@@ -43,6 +43,8 @@ By default, the plugin creates finance notes in:
 - `Финансы/Счета` — accounts;
 - `Финансы/Планирование` — planned expenses.
 
+The destination folder for each note type can be changed independently in the plugin settings. Existing finance notes remain discoverable by their frontmatter and are not moved automatically when a destination changes.
+
 ### Data format
 
 Transaction:
@@ -153,6 +155,8 @@ Oxill Finance — локальный инструмент финансового
 - `Oxill Finance: Добавить расход`;
 - `Oxill Finance: Добавить доход`;
 - `Oxill Finance: Запланировать расход`.
+
+В настройках можно независимо выбрать папки для операций, счетов и планирования. Смена папки влияет только на новые заметки: существующие файлы не перемещаются и продолжают читаться по frontmatter.
 
 Форматы заметок и правила полей приведены в англоязычном разделе [Data format](#data-format). Интерфейсный язык, категории и состав диаграммы на обзоре настраиваются в параметрах плагина.
 

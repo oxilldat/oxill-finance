@@ -1,4 +1,4 @@
-import { App, Modal, Notice, PluginSettingTab, Setting, SettingDefinitionItem } from "obsidian";
+import { App, Modal, normalizePath, Notice, PluginSettingTab, Setting, SettingDefinition, SettingDefinitionItem } from "obsidian";
 
 import type OxillFinancePlugin from "./main";
 import authorAvatar from "../assets/ava.jpg";
@@ -8,11 +8,30 @@ export interface OxillFinanceSettings {
   selectedCategories: string[];
   customCategories: string[];
   language: FinanceLocale;
+  operationsFolder: string;
+  accountsFolder: string;
+  planningFolder: string;
 }
 
 export const DEFAULT_SETTINGS: OxillFinanceSettings = {
-  selectedCategories: [], customCategories: [], language: "ru",
+  selectedCategories: [],
+  customCategories: [],
+  language: "ru",
+  operationsFolder: "Финансы/Операции",
+  accountsFolder: "Финансы/Счета",
+  planningFolder: "Финансы/Планирование",
 };
+
+type FolderSettingKey = "operationsFolder" | "accountsFolder" | "planningFolder";
+
+export function normalizeFinanceSettings(settings: OxillFinanceSettings): OxillFinanceSettings {
+  return {
+    ...settings,
+    operationsFolder: normalizeFolder(settings.operationsFolder, DEFAULT_SETTINGS.operationsFolder),
+    accountsFolder: normalizeFolder(settings.accountsFolder, DEFAULT_SETTINGS.accountsFolder),
+    planningFolder: normalizeFolder(settings.planningFolder, DEFAULT_SETTINGS.planningFolder),
+  };
+}
 
 export class FinanceSettingTab extends PluginSettingTab {
   constructor(app: App, private readonly plugin: OxillFinancePlugin) { super(app, plugin); }
@@ -39,6 +58,27 @@ export class FinanceSettingTab extends PluginSettingTab {
               }));
           },
         }],
+      },
+      {
+        type: "group",
+        cls: "oxf-finance-settings-group oxf-finance-storage-settings",
+        items: [
+          this.folderDefinition(
+            "operationsFolder",
+            t("Операции", "Operations"),
+            t("Доходы, расходы и переводы.", "Income, expenses, and transfers."),
+          ),
+          this.folderDefinition(
+            "accountsFolder",
+            t("Счета", "Accounts"),
+            t("Заметки созданных счетов.", "Notes for created accounts."),
+          ),
+          this.folderDefinition(
+            "planningFolder",
+            t("Планирование", "Planning"),
+            t("Заметки будущих расходов.", "Notes for future expenses."),
+          ),
+        ],
       },
       {
         type: "group",
@@ -77,6 +117,30 @@ export class FinanceSettingTab extends PluginSettingTab {
         },
       },
     ];
+  }
+
+  private folderDefinition(key: FolderSettingKey, name: string, desc: string): SettingDefinition {
+    return {
+      name,
+      desc,
+      aliases: [t("Папка сохранения", "Storage folder")],
+      render: (setting) => {
+        setting.addText((text) => {
+          text.setValue(this.plugin.settings[key]);
+          text.setPlaceholder(DEFAULT_SETTINGS[key]);
+          text.onChange((value) => { this.plugin.settings[key] = value; });
+          text.inputEl.addEventListener("keydown", (event) => {
+            if (event.key === "Enter") text.inputEl.blur();
+          });
+          text.inputEl.addEventListener("blur", () => {
+            const normalized = normalizeFolder(this.plugin.settings[key], DEFAULT_SETTINGS[key]);
+            this.plugin.settings[key] = normalized;
+            text.setValue(normalized);
+            void this.plugin.saveFinanceSettings();
+          });
+        });
+      },
+    };
   }
 
   private openCategoryManager(): void {
@@ -229,6 +293,11 @@ export class FinanceSettingTab extends PluginSettingTab {
     svg.appendChild(createSvg("path", { attr: { d: pathData } }));
     link.appendChild(svg);
   }
+}
+
+function normalizeFolder(value: unknown, fallback: string): string {
+  const trimmed = (typeof value === "string" ? value : "").trim().replace(/^\/+|\/+$/g, "");
+  return trimmed ? normalizePath(trimmed) : fallback;
 }
 
 class RefreshableSettingsModal extends Modal {
