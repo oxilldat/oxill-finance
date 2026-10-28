@@ -43,6 +43,27 @@ export class FinanceSettingTab extends PluginSettingTab {
       {
         type: "group",
         cls: "oxf-finance-settings-group",
+        items: [
+          {
+            name: t("Импорт из Excel", "Import from Excel"),
+            desc: t("Проверьте таблицу и превратите её строки в финансовые заметки.", "Validate a workbook and turn its rows into finance notes."),
+            render: (setting) => { setting.addButton((button) => button.setButtonText(t("Импорт", "Import")).setCta().onClick(() => this.plugin.openExcelImport())); },
+          },
+          {
+            name: t("Экспорт в Excel", "Export to Excel"),
+            desc: t("Сохраните операции, счета, планы и категории в одном файле.", "Save operations, accounts, plans, and categories in one file."),
+            render: (setting) => { setting.addButton((button) => button.setButtonText(t("Экспорт", "Export")).onClick(() => this.plugin.exportFinanceExcel(false))); },
+          },
+          {
+            name: t("Шаблон для выписки", "Statement template"),
+            desc: t("Пустой файл с нужными столбцами и инструкцией.", "An empty workbook with required columns and instructions."),
+            render: (setting) => { setting.addButton((button) => button.setButtonText(t("Скачать", "Download")).onClick(() => this.plugin.exportFinanceExcel(true))); },
+          },
+        ],
+      },
+      {
+        type: "group",
+        cls: "oxf-finance-settings-group",
         items: [{
           name: t("Язык", "Language"),
           desc: t("Язык интерфейса Oxill Finance.", "Oxill Finance interface language."),

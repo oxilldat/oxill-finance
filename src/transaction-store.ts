@@ -1,28 +1,33 @@
 import { App, normalizePath, TFile } from "obsidian";
 
-import { ExpensePlan, ExpensePlanCompletion, FinanceAccount, FinanceIndex, FinanceTransaction, FinanceTransfer, TransactionKind } from "./types";
+import { ExpensePlan, ExpensePlanCompletion, ExpensePlanStatus, FinanceAccount, FinanceIndex, FinanceTransaction, FinanceTransfer, TransactionKind } from "./types";
 import { t } from "./i18n";
 
 type Frontmatter = Record<string, unknown>;
 
 export interface NewTransaction {
+  id?: string;
   kind: TransactionKind;
   amount: number;
   date: Date;
   category: string;
   comment?: string;
   accountId?: string;
+  externalId?: string;
 }
 
-export interface NewAccount { name: string; icon: string; }
-export interface NewTransfer { amount: number; date: Date; fromAccountId: string; toAccountId: string; comment?: string; }
+export interface NewAccount { id?: string; name: string; icon: string; }
+export interface NewTransfer { id?: string; amount: number; date: Date; fromAccountId: string; toAccountId: string; comment?: string; externalId?: string; }
 export interface NewExpensePlan {
+  id?: string;
   title: string;
   amount: number;
   dueDate: Date;
   category: string;
   accountId?: string;
   completion: ExpensePlanCompletion;
+  status?: ExpensePlanStatus;
+  paidAt?: Date;
 }
 
 export interface FinanceStorageFolders {
@@ -54,7 +59,7 @@ export class TransactionStore {
   async createTransaction(input: NewTransaction): Promise<string> {
     const folder = this.getFolders().operations;
     await ensureFolder(this.app, folder);
-    const id = `tx-${formatIdDate(input.date)}-${Math.random().toString(36).slice(2, 6)}`;
+    const id = input.id ?? `tx-${formatIdDate(input.date)}-${Math.random().toString(36).slice(2, 6)}`;
     const content = [
       "---",
       "finance_type: transaction",
@@ -64,6 +69,7 @@ export class TransactionStore {
       `date: ${quote(input.date.toISOString())}`,
       `category: ${quote(input.category)}`,
       ...(input.accountId ? [`account_id: ${quote(input.accountId)}`] : []),
+      ...(input.externalId ? [`external_id: ${quote(input.externalId)}`] : []),
       ...(input.comment ? [`comment: ${quote(input.comment)}`] : []),
       "---",
       "",
@@ -71,14 +77,15 @@ export class TransactionStore {
       "",
     ].join("\n");
     const path = normalizePath(`${folder}/${id}.md`);
-    await this.app.vault.create(path, content);
-    return path;
+    const createdPath = await availablePath(this.app, path);
+    await this.app.vault.create(createdPath, content);
+    return createdPath;
   }
 
   async createAccount(input: NewAccount): Promise<string> {
     const folder = this.getFolders().accounts;
     await ensureFolder(this.app, folder);
-    const id = `account-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    const id = input.id ?? `account-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
     const content = [
       "---", "finance_type: account", `finance_id: ${quote(id)}`,
       `account_name: ${quote(input.name)}`, `icon: ${quote(input.icon)}`, "---", "", `# ${input.icon} ${input.name}`, "",
@@ -103,29 +110,33 @@ export class TransactionStore {
   async createTransfer(input: NewTransfer): Promise<string> {
     const folder = this.getFolders().operations;
     await ensureFolder(this.app, folder);
-    const id = `transfer-${formatIdDate(input.date)}-${Math.random().toString(36).slice(2, 6)}`;
+    const id = input.id ?? `transfer-${formatIdDate(input.date)}-${Math.random().toString(36).slice(2, 6)}`;
     const content = [
       "---", "finance_type: transfer", `finance_id: ${quote(id)}`, "operation: transfer",
       `amount: ${input.amount}`, `date: ${quote(input.date.toISOString())}`,
       `from_account: ${quote(input.fromAccountId)}`, `to_account: ${quote(input.toAccountId)}`,
       ...(input.comment ? [`comment: ${quote(input.comment)}`] : []),
+      ...(input.externalId ? [`external_id: ${quote(input.externalId)}`] : []),
       "---", "", `# ${t("Перевод между счетами", "Transfer between accounts")}`, "",
     ].join("\n");
     const path = normalizePath(`${folder}/${id}.md`);
-    await this.app.vault.create(path, content);
-    return path;
+    const createdPath = await availablePath(this.app, path);
+    await this.app.vault.create(createdPath, content);
+    return createdPath;
   }
 
   async createExpensePlan(input: NewExpensePlan): Promise<string> {
     const folder = this.getFolders().planning;
     await ensureFolder(this.app, folder);
-    const id = `plan-${formatIdDate(input.dueDate)}-${Math.random().toString(36).slice(2, 6)}`;
+    const id = input.id ?? `plan-${formatIdDate(input.dueDate)}-${Math.random().toString(36).slice(2, 6)}`;
     const content = [
       "---", "finance_type: expense_plan", `finance_id: ${quote(id)}`,
       `title: ${quote(input.title)}`, `amount: ${input.amount}`,
       `due_date: ${quote(input.dueDate.toISOString())}`, `category: ${quote(input.category)}`,
       ...(input.accountId ? [`account_id: ${quote(input.accountId)}`] : []),
-      `completion: ${input.completion}`, "status: planned", "---", "", `# ${input.title}`, "",
+      `completion: ${input.completion}`, `status: ${input.status ?? "planned"}`,
+      ...(input.paidAt ? [`paid_at: ${quote(input.paidAt.toISOString())}`] : []),
+      "---", "", `# ${input.title}`, "",
     ].join("\n");
     const path = normalizePath(`${folder}/${safeFileName(input.title)}.md`);
     await this.app.vault.create(await availablePath(this.app, path), content);
@@ -241,6 +252,7 @@ function parseTransaction(file: TFile, data: Frontmatter): FinanceTransaction {
     category: optionalString(data.category) ?? t("Без категории", "Uncategorized"),
     comment: optionalString(data.comment),
     accountId: optionalString(data.account_id),
+    externalId: optionalString(data.external_id),
     file,
   };
 }
@@ -264,7 +276,7 @@ function parseTransfer(file: TFile, data: Frontmatter): FinanceTransfer {
     id: requiredString(data.finance_id, "finance_id"), amount, date,
     fromAccountId: requiredString(data.from_account, "from_account"),
     toAccountId: requiredString(data.to_account, "to_account"),
-    comment: optionalString(data.comment), file,
+    comment: optionalString(data.comment), externalId: optionalString(data.external_id), file,
   };
 }
 

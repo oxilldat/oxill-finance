@@ -8,6 +8,8 @@ import { DeleteExpensePlanModal, ExpensePlanModal } from "./planning-modal";
 import { ExpensePlan, FinanceAccount, TransactionKind } from "./types";
 import { DEFAULT_SETTINGS, FinanceSettingTab, normalizeFinanceSettings, OxillFinanceSettings } from "./settings";
 import { setFinanceLocale, t } from "./i18n";
+import { createFinanceWorkbook, ExcelImportModal, ExcelImportPreview, workbookToArray } from "./excel";
+import { FinanceIndex } from "./types";
 
 export default class OxillFinancePlugin extends Plugin {
   private store!: TransactionStore;
@@ -37,6 +39,9 @@ export default class OxillFinancePlugin extends Plugin {
     this.addCommand({ id: "add-income", name: t("Добавить доход", "Add income"), callback: () => this.openTransactionModal("income") });
     this.addCommand({ id: "add-expense-plan", name: t("Запланировать расход", "Plan expense"), callback: () =>
       new ExpensePlanModal(this.app, this.store, () => this.scheduleRefresh(120)).open() });
+    this.addCommand({ id: "export-excel", name: t("Экспортировать данные в Excel", "Export data to Excel"), callback: () => this.exportFinanceExcel(false) });
+    this.addCommand({ id: "import-excel", name: t("Импортировать данные из Excel", "Import data from Excel"), callback: () => this.openExcelImport() });
+    this.addCommand({ id: "download-excel-template", name: t("Скачать шаблон Excel", "Download Excel template"), callback: () => this.exportFinanceExcel(true) });
     this.registerEvent(this.app.metadataCache.on("changed", (file, _data, cache) => {
       if (file.path.startsWith("Финансы/") || typeof cache.frontmatter?.finance_type === "string") this.scheduleRefresh();
     }));
@@ -95,6 +100,31 @@ export default class OxillFinancePlugin extends Plugin {
       ...index.plans.map((plan) => plan.category),
     ])]
       .sort((left, right) => left.localeCompare(right, this.settings.language));
+  }
+
+  getFinanceIndex(): FinanceIndex { return this.store.getIndex(); }
+
+  openExcelImport(): void { new ExcelImportModal(this).open(); }
+
+  exportFinanceExcel(template: boolean): void {
+    try {
+      const book = createFinanceWorkbook(this.store.getIndex(), this.getAvailableCategories(), template);
+      const blob = new Blob([workbookToArray(book)], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = URL.createObjectURL(blob);
+      const link = document.body.createEl("a", { attr: { href: url, download: template ? "oxill-finance-import-template.xlsx" : `oxill-finance-${new Date().toISOString().slice(0, 10)}.xlsx` } });
+      link.click(); link.remove(); window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      new Notice(template ? t("Шаблон Excel скачан", "Excel template downloaded") : t("Данные экспортированы в Excel", "Data exported to Excel"));
+    } catch (error) { new Notice(error instanceof Error ? error.message : t("Не удалось создать Excel-файл", "Could not create the Excel file")); }
+  }
+
+  async importFinanceExcel(preview: ExcelImportPreview): Promise<number> {
+    for (const account of preview.accounts) await this.store.createAccount(account);
+    for (const transaction of preview.transactions) await this.store.createTransaction(transaction);
+    for (const transfer of preview.transfers) await this.store.createTransfer(transfer);
+    for (const plan of preview.plans) await this.store.createExpensePlan(plan);
+    this.settings.customCategories = [...new Set([...this.settings.customCategories, ...preview.categories])];
+    await this.saveFinanceSettings();
+    return preview.accounts.length + preview.transactions.length + preview.transfers.length + preview.plans.length;
   }
 
   async mergeCategory(source: string, target: string): Promise<void> {

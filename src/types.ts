@@ -11,6 +11,7 @@ export interface FinanceTransaction {
   category: string;
   comment?: string;
   accountId?: string;
+  externalId?: string;
   file: TFile;
 }
 
@@ -29,6 +30,7 @@ export interface FinanceTransfer {
   fromAccountId: string;
   toAccountId: string;
   comment?: string;
+  externalId?: string;
   file: TFile;
 }
 

@@ -5,6 +5,7 @@ import type { TFile } from "obsidian";
 import { calculateSummary, selectCategorySlices } from "./finance";
 import { FinanceTransaction } from "../types";
 import { setFinanceLocale } from "../i18n";
+import { excelHeaders } from "./excel-schema";
 
 const transaction = (kind: "income" | "expense", amount: number, date: string, category: string): FinanceTransaction => ({
   id: `${kind}-${amount}-${date}`,
@@ -13,6 +14,16 @@ const transaction = (kind: "income" | "expense", amount: number, date: string, c
   date: new Date(date),
   category,
   file: { basename: category, path: `${category}.md` } as TFile,
+});
+
+test("локализует заголовки Excel без изменения порядка столбцов", () => {
+  const russian = excelHeaders("operations", "ru");
+  const english = excelHeaders("operations", "en");
+  assert.equal(russian.length, english.length);
+  assert.deepEqual(russian.slice(0, 5), ["ID", "Тип", "Сумма", "Дата", "Категория"]);
+  assert.deepEqual(english.slice(0, 5), ["Finance ID", "Type", "Amount", "Date", "Category"]);
+  assert.equal(russian[8], "Счёт списания");
+  assert.equal(english[8], "From account");
 });
 
 test("рассчитывает баланс и сводку месяца", () => {
