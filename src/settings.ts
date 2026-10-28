@@ -2,6 +2,7 @@ import { App, Modal, normalizePath, Notice, PluginSettingTab, Setting, SettingDe
 
 import type OxillFinancePlugin from "./main";
 import authorAvatar from "../assets/ava.jpg";
+import { FolderSuggest } from "./folder-suggest";
 import { FinanceLocale, setFinanceLocale, t } from "./i18n";
 
 export interface OxillFinanceSettings {
@@ -126,18 +127,20 @@ export class FinanceSettingTab extends PluginSettingTab {
       aliases: [t("Папка сохранения", "Storage folder")],
       render: (setting) => {
         setting.addText((text) => {
+          const commit = async (value: string): Promise<void> => {
+            const normalized = normalizeFolder(value, DEFAULT_SETTINGS[key]);
+            this.plugin.settings[key] = normalized;
+            text.setValue(normalized);
+            await this.plugin.saveFinanceSettings();
+          };
           text.setValue(this.plugin.settings[key]);
           text.setPlaceholder(DEFAULT_SETTINGS[key]);
           text.onChange((value) => { this.plugin.settings[key] = value; });
+          new FolderSuggest(this.app, text.inputEl, (path) => { void commit(path); });
           text.inputEl.addEventListener("keydown", (event) => {
             if (event.key === "Enter") text.inputEl.blur();
           });
-          text.inputEl.addEventListener("blur", () => {
-            const normalized = normalizeFolder(this.plugin.settings[key], DEFAULT_SETTINGS[key]);
-            this.plugin.settings[key] = normalized;
-            text.setValue(normalized);
-            void this.plugin.saveFinanceSettings();
-          });
+          text.inputEl.addEventListener("blur", () => { void commit(this.plugin.settings[key]); });
         });
       },
     };

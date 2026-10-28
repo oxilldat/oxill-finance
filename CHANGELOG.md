@@ -2,6 +2,11 @@
 
 All notable changes to Oxill Finance are documented in this file.
 
+## 1.0.6 — 2026-10-28
+
+- Added native folder suggestions to all storage path settings.
+- Added filtering and keyboard selection while preserving manual path entry.
+
 ## 1.0.5 — 2026-10-26
 
 - Added separate storage folder settings for operations, accounts, and planned expenses.
