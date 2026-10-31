@@ -126,6 +126,7 @@
 .oxf-snapshot-list { display:grid; gap:4px; margin-top:16px; }
 .oxf-snapshot-list>div { display:grid; grid-template-columns:28px minmax(0,1fr) auto; gap:10px; align-items:center; min-height:32px; font-size:12px; }
 .oxf-snapshot-icon { display:grid; width:26px; height:26px; place-items:center; border-radius:8px; background:var(--oxf-soft); }
+.oxf-snapshot-icon svg { width:15px; height:15px; }
 .oxf-snapshot-list strong { font-size:13px; }
 .oxf-overview-section { margin-top:12px; }
 .oxf-overview-section>.oxf-card { margin-top:0; }
@@ -156,7 +157,8 @@
 .oxf-account-transfer:disabled { opacity:.35; cursor:not-allowed; }
 .oxf-account-card { display:flex; min-height:230px; flex-direction:column; }
 .oxf-account-card-heading { display:flex; align-items:center; gap:12px; }
-.oxf-account-icon { display:grid; width:42px; height:42px; flex:0 0 auto; place-items:center; border:1px solid var(--oxf-line); border-radius:13px; background:var(--oxf-soft); font-size:21px; }
+.oxf-account-icon { display:grid; width:42px; height:42px; flex:0 0 auto; place-items:center; border:1px solid var(--oxf-line); border-radius:13px; background:var(--oxf-soft); color:var(--interactive-accent); }
+.oxf-account-icon svg { width:21px; height:21px; }
 .oxf-account-card-heading>div { display:grid; gap:3px; }
 .oxf-account-card-heading strong { font-size:13px; }
 .oxf-account-card-heading span { color:var(--oxf-muted); font-size:9px; }
@@ -212,6 +214,26 @@
 .oxf-planning-inspector { width:100%; min-width:0; overflow:hidden; padding:20px; contain:layout paint; }
 .oxf-planning-inspector>strong { color:var(--oxf-text); font-size:13px; }
 .oxf-planning-inspector>p { max-width:100%; margin:7px 0 18px; color:var(--oxf-muted); font-size:10px; line-height:1.4; overflow-wrap:anywhere; }
+.oxf-planned-transfers { margin-top:12px; }
+.oxf-planned-transfers>.oxf-card-heading>button { display:grid; width:30px; height:30px; place-items:center; padding:0; color:var(--oxf-muted); border:0; border-radius:8px; background:transparent; box-shadow:none; }
+.oxf-planned-transfer-list { display:grid; margin-top:12px; }
+.oxf-planned-transfer { display:grid; grid-template-columns:28px minmax(0,1fr) auto 30px; gap:10px; align-items:center; min-height:54px; padding:8px 0; border-top:1px solid var(--oxf-line); }
+.oxf-planned-transfer>button { display:grid; width:28px; height:28px; place-items:center; padding:0; color:var(--oxf-muted); border:0; border-radius:8px; background:transparent; box-shadow:none; }
+.oxf-planned-transfer>div { display:grid; gap:3px; min-width:0; }
+.oxf-planned-transfer>div strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; }
+.oxf-planned-transfer>div span { color:var(--oxf-muted); font-size:10px; }
+.oxf-planned-transfer>b { font-size:13px; font-variant-numeric:tabular-nums; }
+.oxf-planned-transfer.is-paid { opacity:.55; }
+.oxf-planned-transfer.is-paid>div strong,.oxf-planned-transfer.is-paid>b { text-decoration:line-through; }
+.oxf-debt-summary { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-bottom:14px; }
+.oxf-debt-row { display:grid; grid-template-columns:46px minmax(140px,1fr) minmax(120px,auto) 38px; gap:14px; align-items:center; min-height:74px; padding:12px 16px; border-bottom:1px solid var(--oxf-line); }
+.oxf-debt-row:last-child { border-bottom:0; }
+.oxf-debt-row:hover { background:var(--oxf-row-hover); }
+.oxf-debt-person { width:max-content; max-width:100%; overflow:hidden; padding:0; color:var(--oxf-text); border:0; background:transparent; box-shadow:none; font-size:14px; font-weight:600; text-align:left; text-overflow:ellipsis; white-space:nowrap; cursor:pointer; }
+.oxf-debt-person:hover { color:var(--oxf-accent); text-decoration:underline; }
+.oxf-debt-amount { text-align:right; font-size:19px; font-variant-numeric:tabular-nums; }
+.oxf-debt-amount.is-positive { color:var(--oxf-income); }
+.oxf-debt-amount.is-negative { color:var(--oxf-expense); }
 .oxf-planning-inspector-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:15px; }
 .oxf-planning-inspector-heading>div { display:grid; gap:4px; }
 .oxf-planning-inspector-heading strong { font-size:14px; }
@@ -244,6 +266,17 @@
 @keyframes oxf-inspector-drop{from{opacity:.55;transform:translate3d(0,-8px,0)}to{opacity:1;transform:translate3d(0,0,0)}}
 @media(prefers-reduced-motion:reduce){.oxf-view .oxf-planning-inspector{animation:none}}
 .oxf-modal-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:24px; }
+.oxf-account-icon-select { display:inline-flex; align-items:center; gap:8px; min-width:112px; justify-content:center; }
+.oxf-account-icon-select-preview { display:inline-flex; align-items:center; }
+.oxf-account-icon-select-preview svg { width:17px; height:17px; }
+.oxf-icon-pop { position:fixed; z-index:var(--layer-menu, 1000); width:320px; max-width:calc(100vw - 16px); padding:8px; border:1px solid var(--background-modifier-border); border-radius:var(--radius-m, 8px); background:var(--background-secondary); box-shadow:var(--shadow-s); }
+.oxf-icon-search { width:100%; margin-bottom:8px; }
+.oxf-icon-grid { display:grid; grid-template-columns:repeat(8, 1fr); gap:2px; max-height:240px; overflow-y:auto; }
+.oxf-icon-cell { display:flex; align-items:center; justify-content:center; aspect-ratio:1; border-radius:var(--radius-s); color:var(--text-muted); cursor:pointer; transition:background-color .1s ease, color .1s ease; }
+.oxf-icon-cell:hover { background:var(--background-modifier-hover); color:var(--text-normal); }
+.oxf-icon-cell.is-active { background:var(--interactive-accent); color:var(--text-on-accent); }
+.oxf-icon-cell svg { width:16px; height:16px; }
+.oxf-icon-note { margin-top:6px; color:var(--text-faint); text-align:center; font-size:var(--font-ui-smaller); }
 .oxf-excel-import-modal { width:min(680px,calc(100vw - 32px)); }
 .oxf-excel-import-modal input[type="file"] { width:100%; margin-top:12px; padding:14px; border:1px dashed var(--background-modifier-border); border-radius:10px; }
 .oxf-excel-file-name { margin:0 0 14px; color:var(--text-muted); }
@@ -253,7 +286,7 @@
 .oxf-transaction-modal input[type="number"],.oxf-transaction-modal input[type="datetime-local"] { width:190px; }
 
 @media(max-width:900px){.oxf-main{padding-top:14px}.oxf-finance-hero{grid-template-columns:1fr}.oxf-finance-hero>.oxf-quick-actions{grid-column:1}.oxf-context-grid{grid-template-columns:1fr}.oxf-middle-grid{grid-template-columns:1fr}.oxf-summary-cards{grid-template-columns:1fr 1fr}.oxf-balance-card{grid-column:1/-1}}
-@media(max-width:600px){.oxf-main{padding:12px 10px 40px}.oxf-topbar{align-items:stretch;flex-direction:column}.oxf-period-control{justify-content:flex-end}.oxf-finance-hero{gap:20px;padding:18px}.oxf-hero-balance{font-size:38px}.oxf-hero-metrics{grid-template-columns:1fr}.oxf-quick-actions,.oxf-accounts-actions{display:grid;grid-template-columns:repeat(3,1fr)}.oxf-quick-actions button,.oxf-accounts-actions button{min-width:0;justify-content:center;padding:7px}.oxf-quick-actions button>span:last-child,.oxf-accounts-actions button>span:last-child{display:none}.oxf-category-body{grid-template-columns:1fr;justify-items:center}.oxf-category-legend{width:100%}.oxf-analytics-header{align-items:stretch;flex-direction:column}.oxf-segmented-control{display:grid;grid-template-columns:repeat(3,1fr)}.oxf-summary-cards,.oxf-planning-summary{grid-template-columns:1fr}.oxf-balance-card{grid-column:auto}.oxf-card{padding:16px;border-radius:14px}.oxf-bars-chart{height:210px}.oxf-heatmap-weekdays,.oxf-heatmap{gap:4px}.oxf-heatmap-cell,.oxf-heatmap-blank{min-height:36px;border-radius:7px}.oxf-heatmap-cell{padding:5px}.oxf-accounts-heading,.oxf-planning-heading{align-items:flex-start;flex-direction:column}.oxf-accounts-heading>button{width:100%}.oxf-planning-actions{width:100%;justify-content:space-between}.oxf-account-row{grid-template-columns:40px minmax(0,1fr) 38px;gap:10px}.oxf-account-row .oxf-account-balance{grid-column:2;text-align:left}.oxf-account-transfer{grid-column:2}.oxf-account-more{grid-column:3;grid-row:1}.oxf-history-columns{display:none}.oxf-history-row{grid-template-columns:1fr auto;gap:5px 12px}.oxf-history-row>span{display:none}.oxf-history-row time{grid-column:1;text-align:left}.oxf-history-row b{grid-column:2;grid-row:1}.oxf-history-heading{align-items:flex-start}.oxf-history-heading>div{flex-direction:column}}
+@media(max-width:600px){.oxf-main{padding:12px 10px 40px}.oxf-topbar{align-items:stretch;flex-direction:column}.oxf-period-control{justify-content:flex-end}.oxf-finance-hero{gap:20px;padding:18px}.oxf-hero-balance{font-size:38px}.oxf-hero-metrics{grid-template-columns:1fr}.oxf-quick-actions,.oxf-accounts-actions{display:grid;grid-template-columns:repeat(3,1fr)}.oxf-quick-actions button,.oxf-accounts-actions button{min-width:0;justify-content:center;padding:7px}.oxf-quick-actions button>span:last-child,.oxf-accounts-actions button>span:last-child{display:none}.oxf-category-body{grid-template-columns:1fr;justify-items:center}.oxf-category-legend{width:100%}.oxf-analytics-header{align-items:stretch;flex-direction:column}.oxf-segmented-control{display:grid;grid-template-columns:repeat(3,1fr)}.oxf-summary-cards,.oxf-planning-summary,.oxf-debt-summary{grid-template-columns:1fr}.oxf-balance-card{grid-column:auto}.oxf-card{padding:16px;border-radius:14px}.oxf-bars-chart{height:210px}.oxf-heatmap-weekdays,.oxf-heatmap{gap:4px}.oxf-heatmap-cell,.oxf-heatmap-blank{min-height:36px;border-radius:7px}.oxf-heatmap-cell{padding:5px}.oxf-accounts-heading,.oxf-planning-heading{align-items:flex-start;flex-direction:column}.oxf-accounts-heading>button{width:100%}.oxf-planning-actions{width:100%;justify-content:space-between}.oxf-account-row,.oxf-debt-row{grid-template-columns:40px minmax(0,1fr) 38px;gap:10px}.oxf-account-row .oxf-account-balance,.oxf-debt-amount{grid-column:2;text-align:left}.oxf-account-transfer{grid-column:2}.oxf-account-more{grid-column:3;grid-row:1}.oxf-planned-transfer{grid-template-columns:28px minmax(0,1fr) 30px}.oxf-planned-transfer>b{grid-column:2}.oxf-history-columns{display:none}.oxf-history-row{grid-template-columns:1fr auto;gap:5px 12px}.oxf-history-row>span{display:none}.oxf-history-row time{grid-column:1;text-align:left}.oxf-history-row b{grid-column:2;grid-row:1}.oxf-history-heading{align-items:flex-start}.oxf-history-heading>div{flex-direction:column}}
 
 /* Настройки следуют общему стилю плагинов Oxill: системный заголовок
    раздела остаётся снаружи, а нативные строки Obsidian собраны в карточку. */

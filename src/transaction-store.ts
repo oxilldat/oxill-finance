@@ -1,7 +1,8 @@
 import { App, normalizePath, TFile } from "obsidian";
 
-import { ExpensePlan, ExpensePlanCompletion, ExpensePlanStatus, FinanceAccount, FinanceIndex, FinanceTransaction, FinanceTransfer, TransactionKind } from "./types";
+import { ExpensePlan, ExpensePlanCompletion, ExpensePlanStatus, FinanceAccount, FinanceDebt, FinanceIndex, FinanceTransaction, FinanceTransfer, PlannedTransfer, TransactionKind } from "./types";
 import { t } from "./i18n";
+import { normalizeAccountIcon } from "./core/account-icons";
 
 type Frontmatter = Record<string, unknown>;
 
@@ -29,15 +30,18 @@ export interface NewExpensePlan {
   status?: ExpensePlanStatus;
   paidAt?: Date;
 }
+export interface NewPlannedTransfer { id?: string; amount: number; dueDate: Date; fromAccountId: string; toAccountId: string; status?: ExpensePlanStatus; paidAt?: Date; }
+export interface NewDebt { id?: string; personPath: string; icon: string; amount: number; comment?: string; }
 
 export interface FinanceStorageFolders {
   operations: string;
   accounts: string;
   planning: string;
+  debts: string;
 }
 
 export class TransactionStore {
-  private index: FinanceIndex = { transactions: [], accounts: [], transfers: [], plans: [], issues: [] };
+  private index: FinanceIndex = { transactions: [], accounts: [], transfers: [], plans: [], plannedTransfers: [], debts: [], issues: [] };
   private listeners = new Set<() => void>();
 
   constructor(private readonly app: App, private readonly getFolders: () => FinanceStorageFolders) {}
@@ -86,9 +90,10 @@ export class TransactionStore {
     const folder = this.getFolders().accounts;
     await ensureFolder(this.app, folder);
     const id = input.id ?? `account-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    const icon = normalizeAccountIcon(input.icon);
     const content = [
       "---", "finance_type: account", `finance_id: ${quote(id)}`,
-      `account_name: ${quote(input.name)}`, `icon: ${quote(input.icon)}`, "---", "", `# ${input.icon} ${input.name}`, "",
+      `account_name: ${quote(input.name)}`, `icon: ${quote(icon)}`, "---", "", `# ${input.name}`, "",
     ].join("\n");
     const path = normalizePath(`${folder}/${safeFileName(input.name)}.md`);
     await this.app.vault.create(await availablePath(this.app, path), content);
@@ -98,7 +103,7 @@ export class TransactionStore {
   async updateAccount(account: FinanceAccount, input: NewAccount): Promise<void> {
     await this.app.fileManager.processFrontMatter(account.file, (data) => {
       setFrontmatterValue(data, "account_name", input.name);
-      setFrontmatterValue(data, "icon", input.icon);
+      setFrontmatterValue(data, "icon", normalizeAccountIcon(input.icon));
     });
   }
 
@@ -181,6 +186,79 @@ export class TransactionStore {
     }
   }
 
+  async createPlannedTransfer(input: NewPlannedTransfer): Promise<string> {
+    const folder = this.getFolders().planning;
+    await ensureFolder(this.app, folder);
+    const id = input.id ?? `transfer-plan-${formatIdDate(input.dueDate)}-${Math.random().toString(36).slice(2, 6)}`;
+    const content = [
+      "---", "finance_type: transfer_plan", `finance_id: ${quote(id)}`,
+      `amount: ${input.amount}`, `due_date: ${quote(input.dueDate.toISOString())}`,
+      `from_account: ${quote(input.fromAccountId)}`, `to_account: ${quote(input.toAccountId)}`,
+      `status: ${input.status ?? "planned"}`,
+      ...(input.paidAt ? [`paid_at: ${quote(input.paidAt.toISOString())}`] : []),
+      "---", "", `# ${t("Плановый перевод", "Planned transfer")}`, "",
+    ].join("\n");
+    const path = normalizePath(`${folder}/${id}.md`);
+    await this.app.vault.create(await availablePath(this.app, path), content);
+    return id;
+  }
+
+  async updatePlannedTransfer(plan: PlannedTransfer, input: NewPlannedTransfer): Promise<void> {
+    await this.app.fileManager.processFrontMatter(plan.file, (data) => {
+      setFrontmatterValue(data, "amount", input.amount);
+      setFrontmatterValue(data, "due_date", input.dueDate.toISOString());
+      setFrontmatterValue(data, "from_account", input.fromAccountId);
+      setFrontmatterValue(data, "to_account", input.toAccountId);
+    });
+  }
+
+  async deletePlannedTransfer(plan: PlannedTransfer): Promise<void> { await this.app.fileManager.trashFile(plan.file); }
+
+  async completePlannedTransfer(plan: PlannedTransfer): Promise<void> {
+    if (plan.status === "paid") return;
+    plan.status = "paid";
+    try {
+      const source = this.getAccount(plan.fromAccountId);
+      if (!source || plan.amount > source.balance) throw new Error(t("На счёте недостаточно средств", "Insufficient funds in the account"));
+      await this.createTransfer({ amount: plan.amount, date: new Date(), fromAccountId: plan.fromAccountId, toAccountId: plan.toAccountId, comment: t("Плановый перевод", "Planned transfer") });
+      await this.app.fileManager.processFrontMatter(plan.file, (data) => {
+        setFrontmatterValue(data, "status", "paid");
+        setFrontmatterValue(data, "paid_at", new Date().toISOString());
+      });
+    } catch (error) {
+      plan.status = "planned";
+      throw error;
+    }
+  }
+
+  async createDebt(input: NewDebt): Promise<string> {
+    const folder = this.getFolders().debts;
+    await ensureFolder(this.app, folder);
+    const id = input.id ?? `debt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    const personName = personNameFromPath(input.personPath);
+    const content = [
+      "---", "finance_type: debt", `finance_id: ${quote(id)}`,
+      `person: ${quote(input.personPath)}`, `icon: ${quote(normalizeAccountIcon(input.icon))}`,
+      `amount: ${input.amount}`, ...(input.comment ? [`comment: ${quote(input.comment)}`] : []),
+      "---", "", `# ${t("Долг", "Debt")}: [[${input.personPath}|${personName}]]`, "",
+    ].join("\n");
+    const path = normalizePath(`${folder}/${safeFileName(personName)}.md`);
+    await this.app.vault.create(await availablePath(this.app, path), content);
+    return id;
+  }
+
+  async updateDebt(debt: FinanceDebt, input: NewDebt): Promise<void> {
+    await this.app.fileManager.processFrontMatter(debt.file, (data) => {
+      setFrontmatterValue(data, "person", input.personPath);
+      setFrontmatterValue(data, "icon", normalizeAccountIcon(input.icon));
+      setFrontmatterValue(data, "amount", input.amount);
+      if (input.comment) setFrontmatterValue(data, "comment", input.comment);
+      else deleteFrontmatterValue(data, "comment");
+    });
+  }
+
+  async deleteDebt(debt: FinanceDebt): Promise<void> { await this.app.fileManager.trashFile(debt.file); }
+
   async moveCategory(source: string, target: string): Promise<void> {
     if (!source || !target || source === target) {
       throw new Error(t("Выберите другую категорию для переноса", "Select a different destination category"));
@@ -206,6 +284,8 @@ export function readFinanceIndex(app: App): FinanceIndex {
   const accounts: FinanceAccount[] = [];
   const transfers: FinanceTransfer[] = [];
   const plans: ExpensePlan[] = [];
+  const plannedTransfers: PlannedTransfer[] = [];
+  const debts: FinanceDebt[] = [];
   const issues: FinanceIndex["issues"] = [];
   for (const file of app.vault.getMarkdownFiles()) {
     const data = toFrontmatter(app.metadataCache.getFileCache(file)?.frontmatter);
@@ -214,6 +294,8 @@ export function readFinanceIndex(app: App): FinanceIndex {
       else if (data?.finance_type === "account") accounts.push(parseAccount(file, data));
       else if (data?.finance_type === "transfer") transfers.push(parseTransfer(file, data));
       else if (data?.finance_type === "expense_plan") plans.push(parseExpensePlan(file, data));
+      else if (data?.finance_type === "transfer_plan") plannedTransfers.push(parsePlannedTransfer(file, data));
+      else if (data?.finance_type === "debt") debts.push(parseDebt(file, data));
     } catch (error) {
       issues.push({ path: file.path, message: error instanceof Error ? error.message : t("Некорректная операция", "Invalid transaction") });
     }
@@ -221,6 +303,8 @@ export function readFinanceIndex(app: App): FinanceIndex {
   transactions.sort((left, right) => right.date.getTime() - left.date.getTime());
   transfers.sort((left, right) => right.date.getTime() - left.date.getTime());
   plans.sort((left, right) => left.dueDate.getTime() - right.dueDate.getTime());
+  plannedTransfers.sort((left, right) => left.dueDate.getTime() - right.dueDate.getTime());
+  debts.sort((left, right) => personNameFromPath(left.personPath).localeCompare(personNameFromPath(right.personPath), "ru"));
   const accountMap = new Map(accounts.map((account) => [account.id, account]));
   for (const transaction of transactions) {
     if (!transaction.accountId) continue;
@@ -234,7 +318,7 @@ export function readFinanceIndex(app: App): FinanceIndex {
     if (to) to.balance += transfer.amount;
   }
   accounts.sort((left, right) => left.name.localeCompare(right.name, "ru"));
-  return { transactions, accounts, transfers, plans, issues };
+  return { transactions, accounts, transfers, plans, plannedTransfers, debts, issues };
 }
 
 function parseTransaction(file: TFile, data: Frontmatter): FinanceTransaction {
@@ -261,7 +345,7 @@ function parseAccount(file: TFile, data: Frontmatter): FinanceAccount {
   return {
     id: requiredString(data.finance_id, "finance_id"),
     name: requiredString(data.account_name, "account_name"),
-    icon: optionalString(data.icon) ?? "wallet-cards",
+    icon: normalizeAccountIcon(optionalString(data.icon)),
     balance: 0,
     file,
   };
@@ -296,6 +380,50 @@ function parseExpensePlan(file: TFile, data: Frontmatter): ExpensePlan {
     dueDate, category: optionalString(data.category) ?? t("Без категории", "Uncategorized"), accountId: optionalString(data.account_id),
     status, completion, paidAt: paidAt && !Number.isNaN(paidAt.getTime()) ? paidAt : undefined, file,
   };
+}
+
+function parsePlannedTransfer(file: TFile, data: Frontmatter): PlannedTransfer {
+  const amount = positiveAmount(data.amount);
+  const dueDate = validDate(requiredString(data.due_date, "due_date"));
+  const status = planStatus(data.status);
+  const paidAtValue = optionalString(data.paid_at);
+  return {
+    id: requiredString(data.finance_id, "finance_id"), amount, dueDate,
+    fromAccountId: requiredString(data.from_account, "from_account"),
+    toAccountId: requiredString(data.to_account, "to_account"), status,
+    paidAt: paidAtValue ? validDate(paidAtValue) : undefined, file,
+  };
+}
+
+function parseDebt(file: TFile, data: Frontmatter): FinanceDebt {
+  const amount = Number(data.amount);
+  if (!Number.isFinite(amount) || Math.abs(amount) < 0.005) throw new Error(t("amount долга должен быть ненулевым числом", "Debt amount must be a non-zero number"));
+  return {
+    id: requiredString(data.finance_id, "finance_id"), personPath: requiredString(data.person, "person"),
+    icon: normalizeAccountIcon(optionalString(data.icon)), amount, comment: optionalString(data.comment), file,
+  };
+}
+
+function positiveAmount(value: unknown): number {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0) throw new Error(t("amount должен быть числом больше нуля", "amount must be a number greater than zero"));
+  return amount;
+}
+
+function validDate(value: string): Date {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) throw new Error(t("Некорректная дата", "Invalid date"));
+  return date;
+}
+
+function planStatus(value: unknown): ExpensePlanStatus {
+  const status = optionalString(value) ?? "planned";
+  if (status !== "planned" && status !== "paid") throw new Error(t("status должен быть planned или paid", "status must be planned or paid"));
+  return status;
+}
+
+function personNameFromPath(path: string): string {
+  return path.split("/").pop()?.replace(/\.md$/i, "") || path;
 }
 
 function requiredString(value: unknown, field: string): string {

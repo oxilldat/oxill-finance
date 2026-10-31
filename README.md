@@ -11,8 +11,10 @@ Local-first personal finance planning for Obsidian. Oxill Finance turns Markdown
 - Shows income, expenses, balance, category breakdown, cash-flow dynamics, and operation history.
 - Supports custom accounts, account-to-account transfers, and account balances calculated from notes.
 - Provides yearly expense planning with a category-by-month heatmap.
+- Plans future account-to-account transfers and turns completed plans into ordinary transfers.
+- Tracks personal debts linked to people notes; positive amounts are owed to you and negative amounts are owed by you.
 - Creates and edits ordinary Markdown files instead of hiding financial records in a proprietary database.
-- Imports and exports accounts, operations, transfers, plans, and categories as a single Excel workbook.
+- Imports and exports accounts, operations, transfers, plans, debts, and categories as a single Excel workbook.
 - Supports Russian and English interfaces, light and dark Obsidian themes, desktop and mobile layouts.
 
 All financial data stays in your vault. The plugin does not use network requests, telemetry, external accounts, or cloud synchronization.
@@ -43,6 +45,7 @@ By default, the plugin creates finance notes in:
 - `Финансы/Операции` — income, expenses, and transfers;
 - `Финансы/Счета` — accounts;
 - `Финансы/Планирование` — planned expenses.
+- `Финансы/Долги` — personal debts.
 
 The destination folder for each note type can be changed independently in the plugin settings. Folder fields suggest existing vault folders while still allowing manual paths. Existing finance notes remain discoverable by their frontmatter and are not moved automatically when a destination changes.
 
@@ -50,7 +53,7 @@ The destination folder for each note type can be changed independently in the pl
 
 Use **Settings → Oxill Finance** or the command palette to export all finance data, download an empty statement template, or import a completed `.xlsx` workbook as Markdown notes.
 
-The workbook contains **Operations**, **Accounts**, **Planning**, **Categories**, and **Instructions** sheets. For a bank statement, paste one transaction per row into **Operations**. Required values are documented in the workbook. Dates remain Excel dates and amounts remain numeric.
+The workbook contains **Operations**, **Accounts**, **Planning**, **Planned transfers**, **Debts**, **Categories**, and **Instructions** sheets. For a bank statement, paste one transaction per row into **Operations**. Required values are documented in the workbook. Dates remain Excel dates and amounts remain numeric.
 
 Column headings and workbook instructions follow the selected Oxill Finance interface language. Import remains bilingual and accepts both Russian and English headings, including files created by earlier plugin versions.
 
@@ -82,7 +85,7 @@ Account:
 finance_type: account
 finance_id: account-main
 account_name: Main
-icon: "💳"
+icon: credit-card
 ---
 ```
 
@@ -120,6 +123,35 @@ status: planned
 
 `completion: mark-only` only marks the plan as paid. `completion: create-expense` also creates an ordinary expense operation. Completed plans receive `status: paid` and `paid_at`.
 
+Planned transfer:
+
+```yaml
+---
+finance_type: transfer_plan
+finance_id: transfer-plan-example
+amount: 15000
+due_date: "2027-01-10T12:00:00+03:00"
+from_account: account-main
+to_account: account-savings
+status: planned
+---
+```
+
+Debt:
+
+```yaml
+---
+finance_type: debt
+finance_id: debt-example
+person: People/Alex.md
+icon: user-round
+amount: 50000
+comment: Optional comment
+---
+```
+
+A positive debt amount means the person owes you. A negative amount means you owe the person.
+
 ### Categories
 
 Categories can be created before any operations exist. The overview displays up to eight segments: seven selected or largest categories and an aggregated **Other** segment. Deleting a category requires choosing a replacement; the plugin first moves all linked finance notes to that category and only then removes the original one.
@@ -151,7 +183,9 @@ Oxill Finance — локальный инструмент финансового
 - обзор доходов, расходов, баланса, категорий, динамики и истории операций;
 - пользовательские счета и переводы между ними без ложных доходов и расходов;
 - годовое планирование будущих расходов в виде тепловой карты;
-- импорт и экспорт операций, счетов, переводов, планов и категорий через единый Excel-файл;
+- планирование будущих переводов между счетами;
+- учёт долгов со ссылками на заметки людей и суммами со знаком;
+- импорт и экспорт операций, счетов, переводов, планов, долгов и категорий через единый Excel-файл;
 - создание, переименование и удаление категорий с обязательным переносом связанных заметок;
 - русский и английский интерфейс, светлая и тёмная темы, адаптивная компоновка.
 
@@ -175,7 +209,7 @@ Oxill Finance — локальный инструмент финансового
 
 Названия столбцов и инструкция в Excel соответствуют выбранному языку интерфейса Oxill Finance. Импорт остаётся двуязычным: он принимает русские, английские и старые служебные заголовки.
 
-В настройках можно независимо выбрать папки для операций, счетов и планирования. Поля предлагают существующие папки хранилища, но сохраняют возможность ручного ввода. Смена папки влияет только на новые заметки: существующие файлы не перемещаются и продолжают читаться по frontmatter.
+В настройках можно независимо выбрать папки для операций, счетов, планирования и долгов. Поля предлагают существующие папки хранилища, но сохраняют возможность ручного ввода. Смена папки влияет только на новые заметки: существующие файлы не перемещаются и продолжают читаться по frontmatter.
 
 Форматы заметок и правила полей приведены в англоязычном разделе [Data format](#data-format). Интерфейсный язык, категории и состав диаграммы на обзоре настраиваются в параметрах плагина.
 

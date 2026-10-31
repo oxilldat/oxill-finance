@@ -50,7 +50,7 @@ export class ExpensePlanModal extends Modal {
     const accounts = this.store.getIndex().accounts;
     new Setting(this.contentEl).setName(t("Счёт", "Account")).setDesc(t("Необязательно", "Optional")).addDropdown((dropdown) => {
       dropdown.addOption("", t("Без счёта", "No account"));
-      for (const account of accounts) dropdown.addOption(account.id, `${account.icon} ${account.name}`);
+      for (const account of accounts) dropdown.addOption(account.id, account.name);
       dropdown.setValue(this.accountId).onChange((value) => { this.accountId = value; });
     });
     new Setting(this.contentEl).setName(t("При выполнении", "On completion")).addDropdown((dropdown) => {

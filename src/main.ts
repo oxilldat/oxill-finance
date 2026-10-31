@@ -5,7 +5,9 @@ import { FinanceView, VIEW_TYPE_FINANCE } from "./finance-view";
 import { TransactionModal } from "./transaction-modal";
 import { FinanceStorageFolders, TransactionStore } from "./transaction-store";
 import { DeleteExpensePlanModal, ExpensePlanModal } from "./planning-modal";
-import { ExpensePlan, FinanceAccount, TransactionKind } from "./types";
+import { ExpensePlan, FinanceAccount, PlannedTransfer, TransactionKind } from "./types";
+import { DeletePlannedTransferModal, PlannedTransferModal } from "./planned-transfer-modal";
+import { DebtModal, DeleteDebtModal } from "./debt-modal";
 import { DEFAULT_SETTINGS, FinanceSettingTab, normalizeFinanceSettings, OxillFinanceSettings } from "./settings";
 import { setFinanceLocale, t } from "./i18n";
 import { createFinanceWorkbook, ExcelImportModal, ExcelImportPreview, workbookToArray } from "./excel";
@@ -26,10 +28,17 @@ export default class OxillFinancePlugin extends Plugin {
       editAccount: (account) => new AccountModal(this.app, this.store, () => this.scheduleRefresh(120), account).open(),
       transfer: (accountId) => new TransferModal(this.app, this.store, () => this.scheduleRefresh(120), accountId).open(),
       deleteAccount: (account) => this.openDeleteAccountModal(account),
+      createDebt: () => new DebtModal(this.app, this.store, () => this.scheduleRefresh(120)).open(),
+      editDebt: (debt) => new DebtModal(this.app, this.store, () => this.scheduleRefresh(120), debt).open(),
+      deleteDebt: (debt) => new DeleteDebtModal(this.app, this.store, debt, () => this.scheduleRefresh(120)).open(),
       createPlan: (category, dueDate) => new ExpensePlanModal(this.app, this.store, () => this.scheduleRefresh(120), undefined, { category, dueDate }).open(),
       editPlan: (plan) => new ExpensePlanModal(this.app, this.store, () => this.scheduleRefresh(120), plan).open(),
       deletePlan: (plan) => new DeleteExpensePlanModal(this.app, this.store, plan, () => this.scheduleRefresh(120)).open(),
       completePlan: (plan) => void this.completePlan(plan),
+      createPlannedTransfer: () => new PlannedTransferModal(this.app, this.store, () => this.scheduleRefresh(120)).open(),
+      editPlannedTransfer: (plan) => new PlannedTransferModal(this.app, this.store, () => this.scheduleRefresh(120), plan).open(),
+      deletePlannedTransfer: (plan) => new DeletePlannedTransferModal(this.app, this.store, plan, () => this.scheduleRefresh(120)).open(),
+      completePlannedTransfer: (plan) => void this.completePlannedTransfer(plan),
       selectedCategories: () => this.settings.selectedCategories,
       availableCategories: () => this.getAvailableCategories(),
     }));
@@ -84,6 +93,16 @@ export default class OxillFinancePlugin extends Plugin {
     }
   }
 
+  private async completePlannedTransfer(plan: PlannedTransfer): Promise<void> {
+    try {
+      await this.store.completePlannedTransfer(plan);
+      this.scheduleRefresh(120);
+      new Notice(t("Перевод выполнен", "Transfer completed"));
+    } catch (error) {
+      new Notice(error instanceof Error ? error.message : t("Не удалось выполнить перевод", "Could not complete the transfer"));
+    }
+  }
+
   private scheduleRefresh(delay = 80): void {
     if (this.refreshTimer !== undefined) window.clearTimeout(this.refreshTimer);
     this.refreshTimer = window.setTimeout(() => {
@@ -122,9 +141,11 @@ export default class OxillFinancePlugin extends Plugin {
     for (const transaction of preview.transactions) await this.store.createTransaction(transaction);
     for (const transfer of preview.transfers) await this.store.createTransfer(transfer);
     for (const plan of preview.plans) await this.store.createExpensePlan(plan);
+    for (const plan of preview.plannedTransfers) await this.store.createPlannedTransfer(plan);
+    for (const debt of preview.debts) await this.store.createDebt(debt);
     this.settings.customCategories = [...new Set([...this.settings.customCategories, ...preview.categories])];
     await this.saveFinanceSettings();
-    return preview.accounts.length + preview.transactions.length + preview.transfers.length + preview.plans.length;
+    return preview.accounts.length + preview.transactions.length + preview.transfers.length + preview.plans.length + preview.plannedTransfers.length + preview.debts.length;
   }
 
   async mergeCategory(source: string, target: string): Promise<void> {
@@ -149,6 +170,7 @@ export default class OxillFinancePlugin extends Plugin {
       operations: this.settings.operationsFolder,
       accounts: this.settings.accountsFolder,
       planning: this.settings.planningFolder,
+      debts: this.settings.debtsFolder,
     };
   }
 }

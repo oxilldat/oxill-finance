@@ -12,6 +12,7 @@ export interface OxillFinanceSettings {
   operationsFolder: string;
   accountsFolder: string;
   planningFolder: string;
+  debtsFolder: string;
 }
 
 export const DEFAULT_SETTINGS: OxillFinanceSettings = {
@@ -21,9 +22,10 @@ export const DEFAULT_SETTINGS: OxillFinanceSettings = {
   operationsFolder: "Финансы/Операции",
   accountsFolder: "Финансы/Счета",
   planningFolder: "Финансы/Планирование",
+  debtsFolder: "Финансы/Долги",
 };
 
-type FolderSettingKey = "operationsFolder" | "accountsFolder" | "planningFolder";
+type FolderSettingKey = "operationsFolder" | "accountsFolder" | "planningFolder" | "debtsFolder";
 
 export function normalizeFinanceSettings(settings: OxillFinanceSettings): OxillFinanceSettings {
   return {
@@ -31,6 +33,7 @@ export function normalizeFinanceSettings(settings: OxillFinanceSettings): OxillF
     operationsFolder: normalizeFolder(settings.operationsFolder, DEFAULT_SETTINGS.operationsFolder),
     accountsFolder: normalizeFolder(settings.accountsFolder, DEFAULT_SETTINGS.accountsFolder),
     planningFolder: normalizeFolder(settings.planningFolder, DEFAULT_SETTINGS.planningFolder),
+    debtsFolder: normalizeFolder(settings.debtsFolder, DEFAULT_SETTINGS.debtsFolder),
   };
 }
 
@@ -98,7 +101,12 @@ export class FinanceSettingTab extends PluginSettingTab {
           this.folderDefinition(
             "planningFolder",
             t("Планирование", "Planning"),
-            t("Заметки будущих расходов.", "Notes for future expenses."),
+            t("Заметки будущих расходов и переводов.", "Notes for future expenses and transfers."),
+          ),
+          this.folderDefinition(
+            "debtsFolder",
+            t("Долги", "Debts"),
+            t("Заметки о долгах людей.", "Notes about personal debts."),
           ),
         ],
       },

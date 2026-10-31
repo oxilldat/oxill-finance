@@ -6,6 +6,23 @@ import { calculateSummary, selectCategorySlices } from "./finance";
 import { FinanceTransaction } from "../types";
 import { setFinanceLocale } from "../i18n";
 import { excelHeaders } from "./excel-schema";
+import { normalizeAccountIcon } from "./account-icons";
+import { summarizeDebts } from "./debts";
+
+test("нормализует старые символы счетов в иконки Obsidian", () => {
+  assert.equal(normalizeAccountIcon("💳"), "credit-card");
+  assert.equal(normalizeAccountIcon("🏦"), "landmark");
+  assert.equal(normalizeAccountIcon("credit-card"), "credit-card");
+  assert.equal(normalizeAccountIcon("неизвестная иконка"), "wallet-cards");
+  assert.equal(normalizeAccountIcon("alarm-clock-check"), "alarm-clock-check");
+});
+
+test("разделяет долги по знаку суммы", () => {
+  assert.deepEqual(summarizeDebts([{ amount: 500_000 }, { amount: -50_000 }, { amount: 2_000 }]), {
+    owedToMe: 502_000,
+    iOwe: 50_000,
+  });
+});
 
 const transaction = (kind: "income" | "expense", amount: number, date: string, category: string): FinanceTransaction => ({
   id: `${kind}-${amount}-${date}`,

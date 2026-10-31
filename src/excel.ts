@@ -4,16 +4,18 @@ import * as XLSX from "xlsx";
 import type OxillFinancePlugin from "./main";
 import { getFinanceLocale, t } from "./i18n";
 import { excelHeaders } from "./core/excel-schema";
-import { NewAccount, NewExpensePlan, NewTransaction, NewTransfer } from "./transaction-store";
+import { NewAccount, NewDebt, NewExpensePlan, NewPlannedTransfer, NewTransaction, NewTransfer } from "./transaction-store";
 import { FinanceIndex } from "./types";
 
-const SHEETS = { operations: "Operations", accounts: "Accounts", planning: "Planning", categories: "Categories", help: "Instructions" } as const;
+const SHEETS = { operations: "Operations", accounts: "Accounts", planning: "Planning", plannedTransfers: "Planned transfers", debts: "Debts", categories: "Categories", help: "Instructions" } as const;
 
 export interface ExcelImportPreview {
   accounts: NewAccount[];
   transactions: NewTransaction[];
   transfers: NewTransfer[];
   plans: NewExpensePlan[];
+  plannedTransfers: NewPlannedTransfer[];
+  debts: NewDebt[];
   categories: string[];
   skipped: number;
   errors: string[];
@@ -48,6 +50,15 @@ export function createFinanceWorkbook(index: FinanceIndex, categories: string[],
     plan.accountId ? accountNames.get(plan.accountId) ?? "" : "", plan.completion, plan.status, plan.paidAt ?? "", plan.file.path,
   ]);
   appendSheet(book, SHEETS.planning, planRows, [22, 28, 14, 20, 20, 20, 20, 20, 12, 20, 34]);
+  const plannedTransferRows: unknown[][] = [excelHeaders("plannedTransfers", locale)];
+  if (!template) for (const plan of index.plannedTransfers) plannedTransferRows.push([
+    plan.id, plan.amount, plan.dueDate, plan.fromAccountId, accountNames.get(plan.fromAccountId) ?? "",
+    plan.toAccountId, accountNames.get(plan.toAccountId) ?? "", plan.status, plan.paidAt ?? "", plan.file.path,
+  ]);
+  appendSheet(book, SHEETS.plannedTransfers, plannedTransferRows, [22, 14, 20, 22, 22, 22, 22, 12, 20, 34]);
+  const debtRows: unknown[][] = [excelHeaders("debts", locale)];
+  if (!template) for (const debt of index.debts) debtRows.push([debt.id, debt.personPath, debt.icon, debt.amount, debt.comment ?? "", debt.file.path]);
+  appendSheet(book, SHEETS.debts, debtRows, [22, 34, 18, 18, 30, 34]);
   appendSheet(book, SHEETS.categories, [excelHeaders("categories", locale), ...categories.map((name) => [name])], [28]);
   appendSheet(book, SHEETS.help, instructionRows(locale), [24, 92]);
   return book;
@@ -62,10 +73,11 @@ export function workbookToArray(book: XLSX.WorkBook): ArrayBuffer {
 
 export function parseFinanceWorkbook(data: ArrayBuffer, index: FinanceIndex): ExcelImportPreview {
   const book = XLSX.read(data, { type: "array", cellDates: true });
-  const result: ExcelImportPreview = { accounts: [], transactions: [], transfers: [], plans: [], categories: [], skipped: 0, errors: [] };
+  const result: ExcelImportPreview = { accounts: [], transactions: [], transfers: [], plans: [], plannedTransfers: [], debts: [], categories: [], skipped: 0, errors: [] };
   const existingIds = new Set([
     ...index.accounts.map((item) => item.id), ...index.transactions.map((item) => item.id),
     ...index.transfers.map((item) => item.id), ...index.plans.map((item) => item.id),
+    ...index.plannedTransfers.map((item) => item.id), ...index.debts.map((item) => item.id),
   ]);
   const accountsById = new Map(index.accounts.map((item) => [item.id, item.id]));
   const accountsByName = new Map(index.accounts.map((item) => [normalize(item.name), item.id]));
@@ -133,6 +145,31 @@ export function parseFinanceWorkbook(data: ArrayBuffer, index: FinanceIndex): Ex
     const name = text(row, ["name", "название"]);
     if (name && !result.categories.includes(name)) result.categories.push(name);
   }
+  for (const [position, row] of rows(book, [SHEETS.plannedTransfers, "Плановые переводы"]).entries()) {
+    const line = position + 2;
+    try {
+      const dueDate = parseDate(value(row, ["due date", "срок", "дата"]));
+      const fromAccountId = resolveAccount(row, ["from account id", "id счёта списания", "id счета списания"], ["from account", "счёт списания", "счет списания"], accountsById, accountsByName);
+      const toAccountId = resolveAccount(row, ["to account id", "id счёта зачисления", "id счета зачисления"], ["to account", "счёт зачисления", "счет зачисления"], accountsById, accountsByName);
+      if (fromAccountId === toAccountId) throw new Error(t("Счета перевода должны отличаться", "Transfer accounts must be different"));
+      const id = text(row, ["finance id", "id"]) || stableId("transfer-plan", `${dueDate.toISOString()}|${fromAccountId}|${toAccountId}`);
+      if (existingIds.has(id)) { result.skipped++; continue; }
+      const status = normalize(text(row, ["status", "статус"]));
+      result.plannedTransfers.push({ id, amount: positiveAmount(value(row, ["amount", "сумма"])), dueDate, fromAccountId, toAccountId, status: status === "paid" || status === "выполнен" ? "paid" : "planned" });
+      existingIds.add(id);
+    } catch (error) { result.errors.push(rowError(SHEETS.plannedTransfers, line, error)); }
+  }
+  for (const [position, row] of rows(book, [SHEETS.debts, "Долги"]).entries()) {
+    const line = position + 2;
+    try {
+      const personPath = required(row, ["person note", "заметка человека"], "person note");
+      const amount = signedAmount(value(row, ["signed amount", "сумма со знаком", "сумма"]));
+      const id = text(row, ["finance id", "id"]) || stableId("debt", `${personPath}|${amount}`);
+      if (existingIds.has(id)) { result.skipped++; continue; }
+      result.debts.push({ id, personPath, amount, icon: text(row, ["icon", "иконка"]) || "user-round", comment: text(row, ["comment", "комментарий"]) || undefined });
+      existingIds.add(id);
+    } catch (error) { result.errors.push(rowError(SHEETS.debts, line, error)); }
+  }
   return result;
 }
 
@@ -174,6 +211,8 @@ export class ExcelImportModal extends Modal {
     summary.createDiv({ text: `${t("Счета", "Accounts")}: ${preview.accounts.length}` });
     summary.createDiv({ text: `${t("Операции", "Operations")}: ${preview.transactions.length + preview.transfers.length}` });
     summary.createDiv({ text: `${t("Планы", "Plans")}: ${preview.plans.length}` });
+    summary.createDiv({ text: `${t("Плановые переводы", "Planned transfers")}: ${preview.plannedTransfers.length}` });
+    summary.createDiv({ text: `${t("Долги", "Debts")}: ${preview.debts.length}` });
     summary.createDiv({ text: `${t("Пропущено", "Skipped")}: ${preview.skipped}` });
     if (preview.errors.length > 0) {
       this.contentEl.createEl("h3", { text: t("Нужно исправить", "Needs attention") });
@@ -185,7 +224,7 @@ export class ExcelImportModal extends Modal {
     const choose = actions.createEl("button", { text: t("Другой файл", "Choose another") });
     choose.addEventListener("click", () => this.renderPicker());
     const apply = actions.createEl("button", { cls: "mod-cta", text: t("Создать заметки", "Create notes") });
-    apply.disabled = preview.errors.length > 0 || preview.accounts.length + preview.transactions.length + preview.transfers.length + preview.plans.length === 0;
+    apply.disabled = preview.errors.length > 0 || preview.accounts.length + preview.transactions.length + preview.transfers.length + preview.plans.length + preview.plannedTransfers.length + preview.debts.length === 0;
     apply.addEventListener("click", () => void this.applyImport());
   }
 
@@ -250,6 +289,11 @@ function normalize(input: string): string { return input.trim().toLocaleLowerCas
 function positiveAmount(input: unknown): number {
   const parsed = typeof input === "number" ? input : Number(String(input).replace(/[\s\u00a0]/g, "").replace(",", "."));
   if (!Number.isFinite(parsed) || parsed <= 0) throw new Error(t("amount должен быть положительным числом", "amount must be a positive number"));
+  return parsed;
+}
+function signedAmount(input: unknown): number {
+  const parsed = typeof input === "number" ? input : Number(String(input).replace(/[\s\u00a0]/g, "").replace(",", "."));
+  if (!Number.isFinite(parsed) || Math.abs(parsed) < 0.005) throw new Error(t("Сумма долга должна быть ненулевым числом", "Debt amount must be a non-zero number"));
   return parsed;
 }
 function parseDate(input: unknown): Date {

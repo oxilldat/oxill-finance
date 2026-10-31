@@ -50,6 +50,26 @@ export interface ExpensePlan {
   file: TFile;
 }
 
+export interface PlannedTransfer {
+  id: string;
+  amount: number;
+  dueDate: Date;
+  fromAccountId: string;
+  toAccountId: string;
+  status: ExpensePlanStatus;
+  paidAt?: Date;
+  file: TFile;
+}
+
+export interface FinanceDebt {
+  id: string;
+  personPath: string;
+  icon: string;
+  amount: number;
+  comment?: string;
+  file: TFile;
+}
+
 export interface FinanceIssue {
   path: string;
   message: string;
@@ -60,6 +80,8 @@ export interface FinanceIndex {
   accounts: FinanceAccount[];
   transfers: FinanceTransfer[];
   plans: ExpensePlan[];
+  plannedTransfers: PlannedTransfer[];
+  debts: FinanceDebt[];
   issues: FinanceIssue[];
 }
 

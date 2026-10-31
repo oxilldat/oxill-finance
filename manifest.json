@@ -1,9 +1,9 @@
 {
   "id": "oxill-finance",
   "name": "Oxill Finance",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "minAppVersion": "1.13.0",
-  "description": "Track expenses, income, accounts, transfers, and future plans using local Markdown notes.",
+  "description": "Track expenses, income, accounts, transfers, debts, and future plans using local Markdown notes.",
   "author": "Oxill",
   "authorUrl": "https://t.me/oxilldat",
   "fundingUrl": "https://boosty.to/oxilldat",

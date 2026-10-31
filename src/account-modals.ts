@@ -1,5 +1,7 @@
-import { App, Modal, Notice, Setting } from "obsidian";
+import { App, Modal, Notice, setIcon, Setting } from "obsidian";
 
+import { DEFAULT_ACCOUNT_ICON, normalizeAccountIcon } from "./core/account-icons";
+import { IconPicker } from "./icon-picker";
 import { TransactionStore } from "./transaction-store";
 import { FinanceAccount } from "./types";
 import { t } from "./i18n";
@@ -7,6 +9,7 @@ import { t } from "./i18n";
 export class AccountModal extends Modal {
   private name: string;
   private icon: string;
+  private iconPicker: IconPicker | null = null;
 
   constructor(
     app: App,
@@ -16,31 +19,64 @@ export class AccountModal extends Modal {
   ) {
     super(app);
     this.name = account?.name ?? "";
-    this.icon = account?.icon ?? "💳";
+    this.icon = normalizeAccountIcon(account?.icon);
   }
 
   onOpen(): void {
     this.contentEl.createEl("h2", { text: this.account ? t("Изменить счёт", "Edit account") : t("Новый счёт", "New account") });
     new Setting(this.contentEl).setName(t("Название", "Name")).addText((text) =>
       text.setPlaceholder(t("Основной", "Main")).setValue(this.name).onChange((value) => { this.name = value; }));
-    new Setting(this.contentEl).setName(t("Иконка", "Icon")).setDesc(t("Эмодзи или короткий символ", "Emoji or a short symbol")).addText((text) =>
-      text.setPlaceholder("💳").setValue(this.icon).onChange((value) => { this.icon = value; }));
+    new Setting(this.contentEl)
+      .setName(t("Иконка", "Icon"))
+      .setDesc(t("Выберите иконку Obsidian", "Choose an Obsidian icon"))
+      .addButton((button) => {
+        button.setButtonText(t("Выбрать", "Choose"));
+        button.buttonEl.addClass("oxf-account-icon-select");
+        this.renderIconButton(button.buttonEl);
+        button.onClick(() => {
+          if (this.iconPicker?.isOpen()) {
+            this.iconPicker.close();
+            return;
+          }
+          this.iconPicker = new IconPicker(
+            button.buttonEl,
+            this.icon,
+            (icon) => {
+              this.icon = icon;
+              this.renderIconButton(button.buttonEl);
+            },
+            () => { this.iconPicker = null; },
+          );
+          this.iconPicker.open();
+        });
+      });
     const actions = this.contentEl.createDiv({ cls: "oxf-modal-actions" });
     actions.createEl("button", { text: t("Отмена", "Cancel") }).addEventListener("click", () => this.close());
     actions.createEl("button", { cls: "mod-cta", text: t("Сохранить", "Save") }).addEventListener("click", () => void this.save());
   }
 
-  onClose(): void { this.contentEl.empty(); }
+  onClose(): void {
+    this.iconPicker?.close();
+    this.iconPicker = null;
+    this.contentEl.empty();
+  }
 
   private async save(): Promise<void> {
     const name = this.name.trim();
-    const icon = this.icon.trim() || "💳";
+    const icon = normalizeAccountIcon(this.icon) || DEFAULT_ACCOUNT_ICON;
     if (!name) return void new Notice(t("Введите название счёта", "Enter an account name"));
     if (this.account) await this.store.updateAccount(this.account, { name, icon });
     else await this.store.createAccount({ name, icon });
     this.afterSave();
     new Notice(this.account ? t("Счёт обновлён", "Account updated") : t("Счёт создан", "Account created"));
     this.close();
+  }
+
+  private renderIconButton(button: HTMLButtonElement): void {
+    button.empty();
+    const preview = button.createSpan({ cls: "oxf-account-icon-select-preview" });
+    setIcon(preview, this.icon);
+    button.createSpan({ text: t("Выбрать", "Choose") });
   }
 }
 
@@ -66,7 +102,7 @@ export class TransferModal extends Modal {
     const addAccountDropdown = (setting: Setting, current: string, onChange: (value: string) => void): void => {
       setting.addDropdown((dropdown) => {
         dropdown.addOption("", t("Выберите счёт", "Select an account"));
-        for (const account of accounts) dropdown.addOption(account.id, `${account.icon} ${account.name}`);
+        for (const account of accounts) dropdown.addOption(account.id, account.name);
         dropdown.setValue(current).onChange(onChange);
       });
     };
@@ -115,8 +151,8 @@ export class DeleteAccountModal extends Modal {
   onOpen(): void {
     this.contentEl.createEl("h2", { text: t("Удалить счёт?", "Delete account?") });
     this.contentEl.createEl("p", { text: t(
-      `${this.account.icon} ${this.account.name} будет удалён. История операций останется в хранилище.`,
-      `${this.account.icon} ${this.account.name} will be deleted. Transaction history will remain in the vault.`,
+      `${this.account.name} будет удалён. История операций останется в хранилище.`,
+      `${this.account.name} will be deleted. Transaction history will remain in the vault.`,
     ) });
     const actions = this.contentEl.createDiv({ cls: "oxf-modal-actions" });
     actions.createEl("button", { text: t("Отмена", "Cancel") }).addEventListener("click", () => this.close());
