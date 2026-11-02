@@ -4,16 +4,17 @@ import * as XLSX from "xlsx";
 import type OxillFinancePlugin from "./main";
 import { getFinanceLocale, t } from "./i18n";
 import { excelHeaders } from "./core/excel-schema";
-import { NewAccount, NewDebt, NewExpensePlan, NewPlannedTransfer, NewTransaction, NewTransfer } from "./transaction-store";
+import { NewAccount, NewDebt, NewExpensePlan, NewIncomePlan, NewPlannedTransfer, NewTransaction, NewTransfer } from "./transaction-store";
 import { FinanceIndex } from "./types";
 
-const SHEETS = { operations: "Operations", accounts: "Accounts", planning: "Planning", plannedTransfers: "Planned transfers", debts: "Debts", categories: "Categories", help: "Instructions" } as const;
+const SHEETS = { operations: "Operations", accounts: "Accounts", planning: "Planning", incomePlanning: "Income planning", plannedTransfers: "Planned transfers", debts: "Debts", categories: "Categories", help: "Instructions" } as const;
 
 export interface ExcelImportPreview {
   accounts: NewAccount[];
   transactions: NewTransaction[];
   transfers: NewTransfer[];
   plans: NewExpensePlan[];
+  incomePlans: NewIncomePlan[];
   plannedTransfers: NewPlannedTransfer[];
   debts: NewDebt[];
   categories: string[];
@@ -50,6 +51,12 @@ export function createFinanceWorkbook(index: FinanceIndex, categories: string[],
     plan.accountId ? accountNames.get(plan.accountId) ?? "" : "", plan.completion, plan.status, plan.paidAt ?? "", plan.file.path,
   ]);
   appendSheet(book, SHEETS.planning, planRows, [22, 28, 14, 20, 20, 20, 20, 20, 12, 20, 34]);
+  const incomePlanRows: unknown[][] = [excelHeaders("incomePlanning", locale)];
+  if (!template) for (const plan of index.incomePlans) incomePlanRows.push([
+    plan.id, plan.title, plan.amount, plan.dueDate, plan.category, plan.accountId ?? "",
+    plan.accountId ? accountNames.get(plan.accountId) ?? "" : "", plan.completion, plan.status, plan.paidAt ?? "", plan.file.path,
+  ]);
+  appendSheet(book, SHEETS.incomePlanning, incomePlanRows, [22, 28, 14, 20, 20, 20, 20, 20, 12, 20, 34]);
   const plannedTransferRows: unknown[][] = [excelHeaders("plannedTransfers", locale)];
   if (!template) for (const plan of index.plannedTransfers) plannedTransferRows.push([
     plan.id, plan.amount, plan.dueDate, plan.fromAccountId, accountNames.get(plan.fromAccountId) ?? "",
@@ -73,10 +80,10 @@ export function workbookToArray(book: XLSX.WorkBook): ArrayBuffer {
 
 export function parseFinanceWorkbook(data: ArrayBuffer, index: FinanceIndex): ExcelImportPreview {
   const book = XLSX.read(data, { type: "array", cellDates: true });
-  const result: ExcelImportPreview = { accounts: [], transactions: [], transfers: [], plans: [], plannedTransfers: [], debts: [], categories: [], skipped: 0, errors: [] };
+  const result: ExcelImportPreview = { accounts: [], transactions: [], transfers: [], plans: [], incomePlans: [], plannedTransfers: [], debts: [], categories: [], skipped: 0, errors: [] };
   const existingIds = new Set([
     ...index.accounts.map((item) => item.id), ...index.transactions.map((item) => item.id),
-    ...index.transfers.map((item) => item.id), ...index.plans.map((item) => item.id),
+    ...index.transfers.map((item) => item.id), ...index.plans.map((item) => item.id), ...index.incomePlans.map((item) => item.id),
     ...index.plannedTransfers.map((item) => item.id), ...index.debts.map((item) => item.id),
   ]);
   const accountsById = new Map(index.accounts.map((item) => [item.id, item.id]));
@@ -145,6 +152,26 @@ export function parseFinanceWorkbook(data: ArrayBuffer, index: FinanceIndex): Ex
     const name = text(row, ["name", "название"]);
     if (name && !result.categories.includes(name)) result.categories.push(name);
   }
+  for (const [position, row] of rows(book, [SHEETS.incomePlanning, "Планирование доходов"]).entries()) {
+    const line = position + 2;
+    try {
+      const title = required(row, ["title", "название"], "title");
+      const dueDate = parseDate(value(row, ["expected date", "ожидаемая дата", "дата"]));
+      const category = required(row, ["category", "категория"], "category");
+      const id = text(row, ["finance id", "id"]) || stableId("income-plan", `${title}|${dueDate.toISOString()}|${category}`);
+      if (existingIds.has(id)) { result.skipped++; continue; }
+      const completion = normalize(text(row, ["completion action", "действие при получении"]));
+      const status = normalize(text(row, ["status", "статус"]));
+      result.incomePlans.push({
+        id, title, amount: positiveAmount(value(row, ["amount", "сумма"])), dueDate, category,
+        accountId: resolveOptionalAccount(row, ["account id", "id счёта", "id счета"], ["account", "счёт", "счет"], accountsById, accountsByName),
+        completion: completion === "create-income" || completion === "создать доход" ? "create-income" : "mark-only",
+        status: status === "paid" || status === "received" || status === "получен" ? "paid" : "planned",
+        paidAt: value(row, ["received at", "дата получения"]) ? parseDate(value(row, ["received at", "дата получения"])) : undefined,
+      });
+      existingIds.add(id);
+    } catch (error) { result.errors.push(rowError(SHEETS.incomePlanning, line, error)); }
+  }
   for (const [position, row] of rows(book, [SHEETS.plannedTransfers, "Плановые переводы"]).entries()) {
     const line = position + 2;
     try {
@@ -211,6 +238,7 @@ export class ExcelImportModal extends Modal {
     summary.createDiv({ text: `${t("Счета", "Accounts")}: ${preview.accounts.length}` });
     summary.createDiv({ text: `${t("Операции", "Operations")}: ${preview.transactions.length + preview.transfers.length}` });
     summary.createDiv({ text: `${t("Планы", "Plans")}: ${preview.plans.length}` });
+    summary.createDiv({ text: `${t("Плановые доходы", "Planned income")}: ${preview.incomePlans.length}` });
     summary.createDiv({ text: `${t("Плановые переводы", "Planned transfers")}: ${preview.plannedTransfers.length}` });
     summary.createDiv({ text: `${t("Долги", "Debts")}: ${preview.debts.length}` });
     summary.createDiv({ text: `${t("Пропущено", "Skipped")}: ${preview.skipped}` });
@@ -224,7 +252,7 @@ export class ExcelImportModal extends Modal {
     const choose = actions.createEl("button", { text: t("Другой файл", "Choose another") });
     choose.addEventListener("click", () => this.renderPicker());
     const apply = actions.createEl("button", { cls: "mod-cta", text: t("Создать заметки", "Create notes") });
-    apply.disabled = preview.errors.length > 0 || preview.accounts.length + preview.transactions.length + preview.transfers.length + preview.plans.length + preview.plannedTransfers.length + preview.debts.length === 0;
+    apply.disabled = preview.errors.length > 0 || preview.accounts.length + preview.transactions.length + preview.transfers.length + preview.plans.length + preview.incomePlans.length + preview.plannedTransfers.length + preview.debts.length === 0;
     apply.addEventListener("click", () => void this.applyImport());
   }
 
@@ -238,11 +266,12 @@ export class ExcelImportModal extends Modal {
   }
 }
 
-function appendSheet(book: XLSX.WorkBook, name: string, values: unknown[][], widths: number[]): void {
+function appendSheet(book: XLSX.WorkBook, name: string, values: unknown[][], widths: number[]): XLSX.WorkSheet {
   const sheet = XLSX.utils.aoa_to_sheet(values, { cellDates: true });
   sheet["!cols"] = widths.map((wch) => ({ wch }));
   if (values.length > 0 && values[0]) sheet["!autofilter"] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: Math.max(0, values.length - 1), c: values[0].length - 1 } }) };
   XLSX.utils.book_append_sheet(book, sheet, name);
+  return sheet;
 }
 
 function instructionRows(locale: "ru" | "en"): unknown[][] {

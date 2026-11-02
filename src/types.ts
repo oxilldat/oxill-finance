@@ -36,6 +36,7 @@ export interface FinanceTransfer {
 
 export type ExpensePlanStatus = "planned" | "paid";
 export type ExpensePlanCompletion = "mark-only" | "create-expense";
+export type IncomePlanCompletion = "mark-only" | "create-income";
 
 export interface ExpensePlan {
   id: string;
@@ -46,6 +47,19 @@ export interface ExpensePlan {
   accountId?: string;
   status: ExpensePlanStatus;
   completion: ExpensePlanCompletion;
+  paidAt?: Date;
+  file: TFile;
+}
+
+export interface IncomePlan {
+  id: string;
+  title: string;
+  amount: number;
+  dueDate: Date;
+  category: string;
+  accountId?: string;
+  status: ExpensePlanStatus;
+  completion: IncomePlanCompletion;
   paidAt?: Date;
   file: TFile;
 }
@@ -70,6 +84,26 @@ export interface FinanceDebt {
   file: TFile;
 }
 
+export interface MonthSummaryCategory {
+  name: string;
+  planned: number;
+  actual: number;
+}
+
+export interface FinanceMonthSummary {
+  id: string;
+  period: string;
+  plannedIncome: number;
+  actualIncome: number;
+  plannedExpenses: number;
+  actualExpenses: number;
+  plannedTransfers: number;
+  actualTransfers: number;
+  categories: MonthSummaryCategory[];
+  generatedAt: Date;
+  file: TFile;
+}
+
 export interface FinanceIssue {
   path: string;
   message: string;
@@ -80,8 +114,10 @@ export interface FinanceIndex {
   accounts: FinanceAccount[];
   transfers: FinanceTransfer[];
   plans: ExpensePlan[];
+  incomePlans: IncomePlan[];
   plannedTransfers: PlannedTransfer[];
   debts: FinanceDebt[];
+  monthSummaries: FinanceMonthSummary[];
   issues: FinanceIssue[];
 }
 

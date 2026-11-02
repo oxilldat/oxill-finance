@@ -8,6 +8,11 @@ import { setFinanceLocale } from "../i18n";
 import { excelHeaders } from "./excel-schema";
 import { normalizeAccountIcon } from "./account-icons";
 import { summarizeDebts } from "./debts";
+import { calculateMonthlyPlanningBudget, calculatePlanningForecast } from "./planning";
+import type { ExpensePlan, IncomePlan, PlannedTransfer } from "../types";
+import { createMonthSummarySnapshot, expenseDeviationPercent } from "./month-summary";
+import { createMonthSummaryWorkbook } from "./month-summary-excel";
+import type { FinanceMonthSummary } from "../types";
 
 test("нормализует старые символы счетов в иконки Obsidian", () => {
   assert.equal(normalizeAccountIcon("💳"), "credit-card");
@@ -22,6 +27,65 @@ test("разделяет долги по знаку суммы", () => {
     owedToMe: 502_000,
     iOwe: 50_000,
   });
+});
+
+test("рассчитывает прогноз с плановыми доходами и расходами", () => {
+  const file = { path: "plan.md" } as TFile;
+  const expense = { amount: 30_000, status: "planned", file } as ExpensePlan;
+  const paidExpense = { amount: 5_000, status: "paid", file } as ExpensePlan;
+  const income = { amount: 50_000, status: "planned", file } as IncomePlan;
+  const forecast = calculatePlanningForecast([
+    transaction("income", 100_000, "2026-11-01T10:00:00", "Зарплата"),
+    transaction("expense", 20_000, "2026-11-01T11:00:00", "Жильё"),
+  ], [expense, paidExpense], [income]);
+  assert.deepEqual(forecast, { plannedExpenses: 30_000, expectedIncome: 50_000, currentBalance: 80_000, forecastBalance: 100_000 });
+});
+
+test("рассчитывает свободные деньги выбранного месяца", () => {
+  const file = { path: "plan.md" } as TFile;
+  const expenses = [{ amount: 95_000, file }] as ExpensePlan[];
+  const incomes = [{ amount: 135_000, file }] as IncomePlan[];
+  const transfers = [{ amount: 40_000, file }] as PlannedTransfer[];
+  assert.deepEqual(calculateMonthlyPlanningBudget(expenses, incomes, transfers), {
+    income: 135_000,
+    expenses: 95_000,
+    transfers: 40_000,
+    free: 0,
+  });
+});
+
+test("фиксирует план и факт завершённого месяца", () => {
+  const file = { path: "item.md" } as TFile;
+  const index = {
+    transactions: [
+      transaction("income", 135_000, "2026-11-05T10:00:00", "Зарплата"),
+      transaction("expense", 18_000, "2026-11-10T10:00:00", "Продукты"),
+    ],
+    transfers: [{ amount: 40_000, date: new Date("2026-11-06T10:00:00"), file }],
+    plans: [{ amount: 15_000, category: "Продукты", dueDate: new Date("2026-11-01T10:00:00"), file }],
+    incomePlans: [{ amount: 135_000, dueDate: new Date("2026-11-05T10:00:00"), file }],
+    plannedTransfers: [{ amount: 40_000, dueDate: new Date("2026-11-06T10:00:00"), file }],
+  } as unknown as Parameters<typeof createMonthSummarySnapshot>[0];
+  const summary = createMonthSummarySnapshot(index, 2026, 10);
+  assert.equal(summary.actualExpenses, 18_000);
+  assert.equal(summary.plannedExpenses, 15_000);
+  assert.equal(summary.categories[0]?.name, "Продукты");
+  assert.equal(expenseDeviationPercent(summary), 20);
+});
+
+test("создаёт Excel-отчёт итогов месяца", () => {
+  setFinanceLocale("ru");
+  const summary = {
+    period: "2026-10", generatedAt: new Date("2026-11-01T09:00:00Z"),
+    plannedIncome: 135_000, actualIncome: 135_000,
+    plannedExpenses: 95_000, actualExpenses: 101_400,
+    plannedTransfers: 40_000, actualTransfers: 35_000,
+    categories: [{ name: "Продукты", planned: 15_000, actual: 18_000 }],
+  } as FinanceMonthSummary;
+  const book = createMonthSummaryWorkbook(summary);
+  assert.deepEqual(book.SheetNames, ["Итог", "Категории"]);
+  assert.equal(book.Sheets["Итог"]?.["B5"]?.v, 135_000);
+  assert.equal(book.Sheets["Категории"]?.["A2"]?.v, "Продукты");
 });
 
 const transaction = (kind: "income" | "expense", amount: number, date: string, category: string): FinanceTransaction => ({

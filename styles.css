@@ -181,50 +181,180 @@
 .oxf-planning-heading p { margin:5px 0 0; color:var(--oxf-muted); font-size:10px; }
 .oxf-planning-heading>button { min-width:max-content; }
 .oxf-planning-actions { display:flex; align-items:center; gap:10px; }
-.oxf-year-control { display:grid; grid-template-columns:34px 64px 34px; align-items:center; border:1px solid var(--oxf-line); border-radius:10px; background:var(--oxf-card); }
+.oxf-year-control { display:grid; grid-template-columns:34px minmax(118px,auto) 34px 34px; align-items:center; border:1px solid var(--oxf-line); border-radius:10px; background:var(--oxf-card); }
 .oxf-year-control button { display:grid; width:34px; height:34px; place-items:center; padding:0; color:var(--oxf-muted); border:0; background:transparent; box-shadow:none; }
 .oxf-year-control button:hover { color:var(--oxf-accent); }
 .oxf-year-control strong { font-size:12px; text-align:center; }
-.oxf-planning-workspace { display:grid; grid-template-columns:minmax(220px,.65fr) minmax(430px,.9fr) minmax(250px,.65fr); gap:12px; align-items:stretch; contain:layout style; }
-.oxf-planning-summary { display:grid; grid-template-columns:1fr; gap:12px; }
+.oxf-month-picker-trigger { border-left:1px solid var(--oxf-line); }
+.oxf-planning-actions { position:relative; }
+.oxf-month-picker { position:absolute; z-index:20; top:calc(100% + 8px); right:0; width:236px; padding:12px; border:1px solid var(--oxf-line); border-radius:12px; background:var(--background-primary); box-shadow:var(--shadow-s); }
+.oxf-month-picker>strong { display:block; margin-bottom:9px; color:var(--oxf-text); font-size:12px; text-align:center; }
+.oxf-month-picker-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:5px; }
+.oxf-month-picker-grid button { min-width:0; padding:7px 5px; color:var(--oxf-muted); border:1px solid transparent; border-radius:7px; background:transparent; box-shadow:none; font-size:10px; }
+.oxf-month-picker-grid button:hover { color:var(--oxf-text); background:var(--oxf-hover); }
+.oxf-month-picker-grid button.is-active { color:var(--oxf-on-accent); background:var(--oxf-accent); }
+.oxf-planning-actions>button:not(.mod-cta) { height:36px; padding:0 12px; color:var(--oxf-muted); border:1px solid var(--oxf-line); border-radius:9px; background:var(--oxf-card); box-shadow:none; }
+.oxf-planning-actions>button:not(.mod-cta):hover,.oxf-planning-actions>button:not(.mod-cta).is-active { color:var(--oxf-accent); border-color:var(--oxf-accent); }
+.oxf-planning-overview { display:grid; height:120px; grid-template-columns:minmax(0,1fr) minmax(260px,.55fr); gap:10px; margin-bottom:10px; padding:0; overflow:visible; border:0; border-radius:0; background:transparent; box-shadow:none; }
+.oxf-planning-overview-metrics { display:grid; min-height:0; grid-template-columns:repeat(4,minmax(0,1fr)); overflow:hidden; border:1px solid var(--oxf-line); border-radius:18px; background:var(--oxf-card); box-shadow:0 5px 24px var(--oxf-shadow); }
+.oxf-planning-overview-metric { display:grid; min-width:0; gap:7px; padding:16px 18px; border-right:1px solid var(--oxf-line); }
+.oxf-planning-overview-metric>span { color:var(--oxf-muted); font-size:9px; }
+.oxf-planning-overview-metric>strong { overflow:hidden; font-size:16px; font-variant-numeric:tabular-nums; text-overflow:ellipsis; white-space:nowrap; }
+.oxf-planning-overview-metric.is-income>strong { color:var(--oxf-income); }
+.oxf-planning-overview-metric.is-expense>strong,.oxf-planning-overview-metric.is-danger>strong { color:var(--oxf-expense); }
+.oxf-planning-overview-metric.is-transfer>strong { color:var(--oxf-transfer); }
+.oxf-planning-overview-fact { display:grid; min-width:0; min-height:0; align-content:center; gap:7px; padding:13px 18px; overflow:hidden; border:1px solid var(--oxf-line); border-radius:18px; background:var(--oxf-card); box-shadow:0 5px 24px var(--oxf-shadow); }
+.oxf-planning-overview-fact>strong { font-size:10px; }
+.oxf-planning-overview-fact>b { font-size:14px; font-variant-numeric:tabular-nums; }
+.oxf-planning-overview-fact>span { color:var(--oxf-muted); font-size:9px; }
+.oxf-planning-overview-fact.is-ready { cursor:pointer; }
+.oxf-planning-overview-fact.is-ready:hover { background:var(--oxf-hover); }
+.oxf-planning-overview-fact .oxf-accuracy-labels { display:none; }
+.oxf-planning-overview-fact .oxf-accuracy>strong { font-size:13px; }
+.oxf-planning-overview-fact .oxf-accuracy>span { display:none; }
+.oxf-planning-tabs { display:flex; width:max-content; gap:4px; margin:0 0 10px; padding:4px; border:1px solid var(--oxf-line); border-radius:11px; background:var(--oxf-card); }
+.oxf-planning-tabs button { height:30px; padding:0 13px; color:var(--oxf-muted); border:0; border-radius:8px; background:transparent; box-shadow:none; font-size:10px; }
+.oxf-planning-tabs button:hover { color:var(--oxf-text); background:var(--oxf-hover); }
+.oxf-planning-tabs button.is-active { color:var(--oxf-on-accent); background:var(--oxf-accent); }
+.oxf-month-planner { display:block; }
+.oxf-month-planner>.oxf-card { padding:16px; }
+.oxf-month-planner-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; }
+.oxf-month-planner-heading>div { display:grid; gap:3px; }
+.oxf-month-planner-heading strong { font-size:13px; }
+.oxf-month-planner-heading span { color:var(--oxf-muted); font-size:9px; }
+.oxf-month-planner-heading>button { display:grid; width:28px; height:28px; place-items:center; padding:0; color:var(--oxf-muted); border:0; border-radius:8px; background:transparent; box-shadow:none; }
+.oxf-month-planner-heading>button:hover { color:var(--oxf-text); background:var(--oxf-hover); }
+.oxf-month-planner-empty { margin:24px 0 10px; text-align:center; }
+.oxf-month-expense-groups { display:grid; gap:8px; }
+.oxf-month-expense-group { overflow:hidden; border:1px solid var(--oxf-line); border-radius:12px; background:var(--oxf-soft); }
+.oxf-month-expense-group-heading { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; align-items:center; padding:9px 11px; }
+.oxf-month-expense-group-heading>div { display:grid; gap:2px; }
+.oxf-month-expense-group-heading strong { font-size:11px; }
+.oxf-month-expense-group-heading span { color:var(--oxf-muted); font-size:8px; }
+.oxf-month-expense-group-heading>b { font-size:11px; font-variant-numeric:tabular-nums; }
+.oxf-month-plan-row { display:grid; grid-template-columns:26px minmax(0,1fr) auto 26px; gap:8px; align-items:center; min-height:44px; padding:6px 9px; border-top:1px solid var(--oxf-line); background:var(--oxf-card); }
+.oxf-month-plan-row>button { display:grid; width:26px; height:26px; place-items:center; padding:0; color:var(--oxf-muted); border:0; border-radius:7px; background:transparent; box-shadow:none; }
+.oxf-month-plan-row>div { display:grid; min-width:0; gap:2px; }
+.oxf-month-plan-row>div strong,.oxf-month-plan-row>div span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.oxf-month-plan-row>div strong { font-size:10px; }
+.oxf-month-plan-row>div span { color:var(--oxf-muted); font-size:8px; }
+.oxf-month-plan-row>b { font-size:11px; font-variant-numeric:tabular-nums; }
+.oxf-month-plan-row.is-paid { opacity:.55; }
+.oxf-month-plan-row.is-paid>div strong,.oxf-month-plan-row.is-paid>b { text-decoration:line-through; }
+.oxf-planning-timeline-list { display:grid; }
+.oxf-planning-timeline-row { display:grid; grid-template-columns:34px 24px minmax(0,1fr) auto 26px 26px; gap:7px; align-items:center; min-height:55px; padding:7px 0; border-top:1px solid var(--oxf-line); }
+.oxf-planning-timeline-date { display:grid; gap:0; text-align:center; }
+.oxf-planning-timeline-date strong { font-size:12px; }
+.oxf-planning-timeline-date span { color:var(--oxf-muted); font-size:7px; text-transform:uppercase; }
+.oxf-planning-timeline-marker { display:grid; width:24px; height:24px; place-items:center; color:var(--oxf-expense); border-radius:7px; background:color-mix(in srgb,var(--oxf-expense) 12%,transparent); }
+.oxf-planning-timeline-row.is-income .oxf-planning-timeline-marker { color:var(--oxf-income); background:color-mix(in srgb,var(--oxf-income) 12%,transparent); }
+.oxf-planning-timeline-row.is-transfer .oxf-planning-timeline-marker { color:var(--oxf-transfer); background:color-mix(in srgb,var(--oxf-transfer) 12%,transparent); }
+.oxf-planning-timeline-marker svg { width:13px; height:13px; }
+.oxf-planning-timeline-text { display:grid; min-width:0; gap:2px; }
+.oxf-planning-timeline-text strong,.oxf-planning-timeline-text span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.oxf-planning-timeline-text strong { font-size:10px; }
+.oxf-planning-timeline-text span { color:var(--oxf-muted); font-size:8px; }
+.oxf-year-plan { padding:16px; }
+.oxf-year-plan-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.oxf-year-plan-month { display:grid; grid-template-columns:minmax(120px,1fr) minmax(0,2fr); gap:14px; align-items:center; min-height:64px; padding:10px 12px; color:var(--oxf-text); border:1px solid var(--oxf-line); border-radius:12px; background:var(--oxf-soft); box-shadow:none; text-align:left; }
+.oxf-year-plan-month:hover { border-color:var(--oxf-accent); background:var(--oxf-hover); }
+.oxf-year-plan-month.is-active { border-color:var(--oxf-accent); box-shadow:inset 0 0 0 1px var(--oxf-accent); }
+.oxf-year-plan-month>div:first-child { display:grid; gap:3px; }
+.oxf-year-plan-month>div:first-child strong { font-size:11px; }
+.oxf-year-plan-month>div:first-child span { color:var(--oxf-muted); font-size:8px; }
+.oxf-year-plan-values { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; align-items:center; text-align:right; font-size:9px; font-variant-numeric:tabular-nums; }
+.oxf-year-plan-values .is-income { color:var(--oxf-income); }
+.oxf-year-plan-values .is-expense,.oxf-year-plan-values .is-danger { color:var(--oxf-expense); }
+.oxf-year-plan-values .is-transfer { color:var(--oxf-transfer); }
+.oxf-planning-timeline-row>b { font-size:10px; font-variant-numeric:tabular-nums; }
+.oxf-planning-timeline-row.is-income>b { color:var(--oxf-income); }
+.oxf-planning-timeline-row.is-expense>b { color:var(--oxf-expense); }
+.oxf-planning-timeline-row.is-transfer>b { color:var(--oxf-transfer); }
+.oxf-planning-timeline-row>button { display:grid; width:26px; height:26px; place-items:center; padding:0; color:var(--oxf-muted); border:0; border-radius:7px; background:transparent; box-shadow:none; }
+.oxf-planning-timeline-row.is-paid { opacity:.55; }
+.oxf-planning-workspace { display:grid; grid-template-columns:280px max-content; gap:10px; align-items:stretch; justify-content:start; contain:layout style; }
+.oxf-planning-summary { display:grid; height:100%; grid-template-columns:280px; grid-template-rows:1fr 1fr; gap:8px; align-self:stretch; }
+.oxf-planning-summary>.oxf-card { padding:16px; }
 .oxf-planning-metric { display:grid; gap:12px; }
 .oxf-planning-metric span { color:var(--oxf-muted); font-size:11px; }
 .oxf-planning-metric strong { color:var(--oxf-text); font-size:clamp(22px,3vw,34px); font-variant-numeric:tabular-nums; }
+.oxf-planning-budget { display:grid; gap:13px; }
+.oxf-planning-budget-period { color:var(--oxf-muted); font-size:11px; }
+.oxf-planning-budget-values { display:grid; gap:10px; }
+.oxf-planning-budget-value { display:grid; grid-template-columns:1fr auto; gap:10px; align-items:baseline; }
+.oxf-planning-budget-value span { color:var(--oxf-muted); font-size:10px; }
+.oxf-planning-budget-value strong { font-size:15px; font-variant-numeric:tabular-nums; }
+.oxf-planning-budget-value.is-income strong { color:var(--oxf-income); }
+.oxf-planning-budget-value.is-expense strong,.oxf-planning-budget-value.is-danger strong { color:var(--oxf-expense); }
+.oxf-month-fact { display:grid; min-height:0; align-content:center; gap:12px; }
+.oxf-month-fact>strong { font-size:12px; }
+.oxf-month-fact>p { margin:0; color:var(--oxf-muted); font-size:10px; line-height:1.5; }
+.oxf-month-fact>button { width:max-content; color:var(--oxf-on-accent); border-color:var(--oxf-accent); background:var(--oxf-accent); }
+.oxf-month-fact.is-ready { cursor:pointer; }
+.oxf-month-fact.is-ready:hover { border-color:color-mix(in srgb,var(--oxf-accent) 60%,var(--oxf-line)); }
+.oxf-accuracy { display:grid; gap:7px; min-width:0; }
+.oxf-accuracy-labels { display:flex; justify-content:space-between; color:var(--oxf-muted); font-size:8px; }
+.oxf-accuracy-track { position:relative; display:grid; height:9px; grid-template-columns:35% 30% 35%; overflow:visible; border-radius:999px; background:var(--oxf-track); }
+.oxf-accuracy-zone { height:100%; }
+.oxf-accuracy-zone.is-left { border-radius:999px 0 0 999px; background:color-mix(in srgb,var(--oxf-income) 22%,var(--oxf-track)); }
+.oxf-accuracy-zone.is-center { background:color-mix(in srgb,var(--oxf-accent) 48%,var(--oxf-track)); }
+.oxf-accuracy-zone.is-right { border-radius:0 999px 999px 0; background:color-mix(in srgb,var(--oxf-expense) 28%,var(--oxf-track)); }
+.oxf-accuracy-marker { position:absolute; top:50%; width:3px; height:19px; border-radius:999px; background:var(--oxf-text); box-shadow:0 0 0 2px var(--oxf-card); transform:translate(-50%,-50%); }
+.oxf-accuracy>strong { font-size:16px; font-variant-numeric:tabular-nums; text-align:center; }
+.oxf-accuracy>span { color:var(--oxf-muted); font-size:9px; text-align:center; }
 .oxf-planning-metric.is-danger { border-color:var(--oxf-danger-line); background:var(--oxf-danger-bg); }
 .oxf-planning-metric.is-danger strong { color:var(--oxf-danger); }
 .oxf-planning-modal input[type="number"],.oxf-planning-modal input[type="date"] { width:190px; }
-.oxf-planning-map-card { margin:0; padding:16px; overflow:hidden; }
-.oxf-planning-map-scroll { width:100%; min-width:0; overflow:hidden; padding-bottom:3px; }
-.oxf-planning-map { display:grid; width:100%; min-width:0; grid-template-columns:minmax(90px,1fr) repeat(12,minmax(8px,15px)); gap:2px clamp(3px,.45vw,8px); align-items:center; }
-.oxf-planning-corner,.oxf-planning-month { display:flex; min-height:28px; align-items:center; color:var(--oxf-muted); font-size:9px; }
-.oxf-planning-month { justify-content:center; overflow:visible; font-size:8px; text-align:center; }
-.oxf-planning-category { display:flex; min-height:17px; align-items:center; overflow:hidden; padding-right:10px; color:var(--oxf-text); font-size:11px; line-height:1; text-overflow:ellipsis; white-space:nowrap; }
-.oxf-planning-cell { display:grid; width:100%; max-width:15px; min-width:0; height:15px; min-height:15px; place-items:center; padding:0; color:var(--oxf-muted); border:1px solid var(--oxf-line); border-radius:4px; background:var(--oxf-track); box-shadow:none; cursor:pointer; }
-.oxf-planning-cell:disabled { opacity:1; cursor:default; }
-.oxf-planning-cell.is-level-1 { color:var(--oxf-text); background:color-mix(in srgb,var(--oxf-accent) 18%,var(--oxf-card)); }
-.oxf-planning-cell.is-level-2 { color:var(--oxf-text); background:color-mix(in srgb,var(--oxf-accent) 34%,var(--oxf-card)); }
-.oxf-planning-cell.is-level-3 { color:var(--oxf-on-accent); background:color-mix(in srgb,var(--oxf-accent) 68%,var(--oxf-card)); }
-.oxf-planning-cell.is-level-4 { color:var(--oxf-on-accent); background:var(--oxf-accent); }
-.oxf-planning-cell:not(:disabled):hover { border-color:var(--oxf-accent); transform:translateY(-1px); }
-.oxf-planning-cell.is-selected { outline:2px solid var(--oxf-accent); outline-offset:2px; }
-.oxf-planning-cell.is-checked { color:var(--oxf-on-accent); border-color:var(--oxf-income); background:var(--oxf-income); }
-.oxf-planning-cell svg { width:10px; height:10px; stroke-width:3; }
-.oxf-planning-map-empty { padding:36px 12px; color:var(--oxf-muted); font-size:11px; text-align:center; }
-.oxf-planning-map-empty-wide { grid-column:1/-1; }
-.oxf-planning-inspector { width:100%; min-width:0; overflow:hidden; padding:20px; contain:layout paint; }
+.oxf-planning-year-card { width:620px; min-width:0; margin:0; padding:14px; overflow:hidden; }
+.oxf-planning-months { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:6px; }
+.oxf-planning-month-card { display:grid; min-width:0; min-height:72px; align-content:start; gap:3px; padding:8px; color:var(--oxf-text); border:1px solid var(--oxf-line); border-radius:10px; background:var(--oxf-soft); box-shadow:none; text-align:left; }
+.oxf-planning-month-card:hover { border-color:color-mix(in srgb,var(--oxf-accent) 55%,var(--oxf-line)); background:var(--oxf-hover); }
+.oxf-planning-month-card.is-active { border-color:var(--oxf-accent); box-shadow:inset 0 0 0 1px var(--oxf-accent); }
+.oxf-planning-month-card.is-level-1 { background:color-mix(in srgb,var(--oxf-accent) 8%,var(--oxf-soft)); }
+.oxf-planning-month-card.is-level-2 { background:color-mix(in srgb,var(--oxf-accent) 13%,var(--oxf-soft)); }
+.oxf-planning-month-card.is-level-3 { background:color-mix(in srgb,var(--oxf-accent) 19%,var(--oxf-soft)); }
+.oxf-planning-month-card.is-level-4 { background:color-mix(in srgb,var(--oxf-accent) 26%,var(--oxf-soft)); }
+.oxf-planning-month-card>span { color:var(--oxf-muted); font-size:9px; }
+.oxf-planning-month-card>strong { overflow:hidden; font-size:11px; font-variant-numeric:tabular-nums; text-overflow:ellipsis; white-space:nowrap; }
+.oxf-planning-month-card>small { overflow:hidden; color:var(--oxf-muted); font-size:8px; text-overflow:ellipsis; white-space:nowrap; }
+.oxf-planning-month-progress { height:3px; margin-top:3px; overflow:hidden; border-radius:999px; background:var(--oxf-track); }
+.oxf-planning-month-progress>div { height:100%; border-radius:inherit; background:var(--oxf-income); }
+.oxf-planning-month-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:14px; padding:13px 2px 9px; border-top:1px solid var(--oxf-line); }
+.oxf-planning-month-heading>div { display:grid; gap:3px; }
+.oxf-planning-month-heading strong { font-size:13px; }
+.oxf-planning-month-heading span { color:var(--oxf-muted); font-size:9px; }
+.oxf-planning-month-heading>button { display:grid; width:28px; height:28px; place-items:center; padding:0; color:var(--oxf-muted); border:0; border-radius:8px; background:transparent; box-shadow:none; }
+.oxf-planning-month-heading>button:hover { color:var(--oxf-text); background:var(--oxf-hover); }
+.oxf-planning-year-empty { margin:4px 2px 2px; }
+.oxf-planning-category-list { display:grid; max-height:176px; overflow-y:auto; }
+.oxf-planning-category-row { display:grid; min-height:43px; grid-template-columns:minmax(0,1fr) auto 20px; gap:10px; align-items:center; padding:7px 2px; color:var(--oxf-text); border:0; border-top:1px solid var(--oxf-line); border-radius:0; background:transparent; box-shadow:none; text-align:left; }
+.oxf-planning-category-row:hover,.oxf-planning-category-row.is-open { background:var(--oxf-hover); }
+.oxf-planning-category-row>div { display:grid; min-width:0; gap:2px; }
+.oxf-planning-category-row strong { overflow:hidden; font-size:11px; text-overflow:ellipsis; white-space:nowrap; }
+.oxf-planning-category-row div span { color:var(--oxf-muted); font-size:8px; }
+.oxf-planning-category-row>b { font-size:11px; font-variant-numeric:tabular-nums; }
+.oxf-planning-category-row>span { display:grid; color:var(--oxf-muted); place-items:center; }
+.oxf-planning-category-row svg { width:14px; height:14px; }
+.oxf-planning-inspector { width:100%; min-width:0; overflow:hidden; margin-top:6px; padding:12px 2px 2px; border-top:1px solid var(--oxf-line); contain:layout paint; animation:oxf-inspector-drop .16s ease-out; }
 .oxf-planning-inspector>strong { color:var(--oxf-text); font-size:13px; }
 .oxf-planning-inspector>p { max-width:100%; margin:7px 0 18px; color:var(--oxf-muted); font-size:10px; line-height:1.4; overflow-wrap:anywhere; }
-.oxf-planned-transfers { margin-top:12px; }
-.oxf-planned-transfers>.oxf-card-heading>button { display:grid; width:30px; height:30px; place-items:center; padding:0; color:var(--oxf-muted); border:0; border-radius:8px; background:transparent; box-shadow:none; }
-.oxf-planned-transfer-list { display:grid; margin-top:12px; }
-.oxf-planned-transfer { display:grid; grid-template-columns:28px minmax(0,1fr) auto 30px; gap:10px; align-items:center; min-height:54px; padding:8px 0; border-top:1px solid var(--oxf-line); }
-.oxf-planned-transfer>button { display:grid; width:28px; height:28px; place-items:center; padding:0; color:var(--oxf-muted); border:0; border-radius:8px; background:transparent; box-shadow:none; }
-.oxf-planned-transfer>div { display:grid; gap:3px; min-width:0; }
-.oxf-planned-transfer>div strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; }
-.oxf-planned-transfer>div span { color:var(--oxf-muted); font-size:10px; }
-.oxf-planned-transfer>b { font-size:13px; font-variant-numeric:tabular-nums; }
-.oxf-planned-transfer.is-paid { opacity:.55; }
-.oxf-planned-transfer.is-paid>div strong,.oxf-planned-transfer.is-paid>b { text-decoration:line-through; }
+.oxf-planning-lists { display:grid; grid-template-columns:minmax(0,1fr); gap:10px; align-items:start; margin-top:12px; }
+.oxf-planned-transfers,.oxf-planned-incomes { min-width:0; margin:0; }
+.oxf-planned-transfers.is-empty,.oxf-planned-incomes.is-empty { padding-top:14px; padding-bottom:14px; }
+.oxf-planned-transfers.is-empty>p,.oxf-planned-incomes.is-empty>p { margin:8px 0 0; color:var(--oxf-muted); font-size:10px; }
+.oxf-planned-transfers>.oxf-card-heading>button,.oxf-planned-incomes>.oxf-card-heading>button { display:grid; width:30px; height:30px; place-items:center; padding:0; color:var(--oxf-muted); border:0; border-radius:8px; background:transparent; box-shadow:none; }
+.oxf-planned-incomes>.oxf-card-heading>div { display:grid; gap:4px; }
+.oxf-planned-incomes>.oxf-card-heading>div>span { color:var(--oxf-muted); font-size:10px; }
+.oxf-planned-transfer-list,.oxf-planned-income-list { display:grid; margin-top:12px; }
+.oxf-planned-transfer,.oxf-planned-income { display:grid; grid-template-columns:28px minmax(0,1fr) auto 30px; gap:10px; align-items:center; min-height:54px; padding:8px 0; border-top:1px solid var(--oxf-line); }
+.oxf-planned-transfer>button,.oxf-planned-income>button { display:grid; width:28px; height:28px; place-items:center; padding:0; color:var(--oxf-muted); border:0; border-radius:8px; background:transparent; box-shadow:none; }
+.oxf-planned-transfer>div,.oxf-planned-income>div { display:grid; gap:3px; min-width:0; }
+.oxf-planned-transfer>div strong,.oxf-planned-income>div strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; }
+.oxf-planned-transfer>div span,.oxf-planned-income>div span { color:var(--oxf-muted); font-size:10px; }
+.oxf-planned-transfer>b,.oxf-planned-income>b { font-size:13px; font-variant-numeric:tabular-nums; }
+.oxf-planned-income>b { color:var(--oxf-income); }
+.oxf-planned-transfer.is-paid,.oxf-planned-income.is-paid { opacity:.55; }
+.oxf-planned-transfer.is-paid>div strong,.oxf-planned-transfer.is-paid>b,.oxf-planned-income.is-paid>div strong,.oxf-planned-income.is-paid>b { text-decoration:line-through; }
 .oxf-debt-summary { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-bottom:14px; }
 .oxf-debt-row { display:grid; grid-template-columns:46px minmax(140px,1fr) minmax(120px,auto) 38px; gap:14px; align-items:center; min-height:74px; padding:12px 16px; border-bottom:1px solid var(--oxf-line); }
 .oxf-debt-row:last-child { border-bottom:0; }
@@ -240,11 +370,6 @@
 .oxf-planning-inspector-heading span { color:var(--oxf-muted); font-size:10px; }
 .oxf-planning-inspector-heading>button,.oxf-inspector-plan>button { display:grid; width:28px; height:28px; flex:0 0 auto; place-items:center; padding:0; color:var(--oxf-muted); border:0; border-radius:8px; background:transparent; box-shadow:none; }
 .oxf-planning-inspector-heading>button:hover,.oxf-inspector-plan>button:hover { color:var(--oxf-text); background:var(--oxf-hover); }
-.oxf-planning-mini-chart { display:grid; width:100%; max-width:100%; height:150px; grid-template-columns:repeat(12,minmax(0,1fr)); gap:4px; align-items:end; margin-top:18px; overflow:hidden; }
-.oxf-planning-mini-chart>div { display:grid; min-width:0; height:100%; grid-template-rows:1fr 18px; align-items:end; }
-.oxf-planning-mini-chart>div>div { width:100%; min-width:0; }
-.oxf-planning-mini-chart>div>div.has-value { min-height:3px; border-radius:5px 5px 2px 2px; background:var(--oxf-accent); }
-.oxf-planning-mini-chart span { color:var(--oxf-muted); font-size:7px; text-align:center; }
 .oxf-inspector-plan-list { display:grid; gap:5px; }
 .oxf-inspector-plan { display:grid; grid-template-columns:28px minmax(0,1fr) 28px; gap:8px; align-items:center; min-height:48px; padding:6px; border:1px solid var(--oxf-line); border-radius:11px; background:var(--oxf-soft); }
 .oxf-inspector-plan.is-paid { opacity:.55; }
@@ -255,16 +380,18 @@
 .oxf-inspector-plan>div strong { font-size:11px; }
 .oxf-inspector-plan>div span { color:var(--oxf-muted); font-size:9px; }
 .oxf-inspector-add { width:100%; margin-top:10px; color:var(--oxf-accent); border:1px dashed var(--oxf-accent); border-radius:10px; background:var(--oxf-accent-soft); box-shadow:none; }
-.oxf-view.is-planning-compact .oxf-planning-workspace { grid-template-columns:minmax(220px,.65fr) minmax(430px,1.35fr); }
-.oxf-view.is-planning-compact .oxf-planning-inspector { grid-column:1/-1; min-height:260px; animation:oxf-inspector-drop .16s ease-out; }
-.oxf-view.is-planning-compact .oxf-planning-mini-chart { height:190px; }
-.oxf-view.is-planning-wide .oxf-planning-inspector { animation:oxf-inspector-side .16s ease-out; }
-.oxf-view.is-planning-narrow .oxf-planning-workspace { grid-template-columns:1fr; }
-.oxf-view.is-planning-narrow .oxf-planning-summary { grid-template-columns:1fr 1fr; }
-.oxf-view.is-planning-narrow .oxf-planning-inspector { grid-column:auto; animation:oxf-inspector-drop .16s ease-out; }
-@keyframes oxf-inspector-side{from{opacity:.55;transform:translate3d(10px,0,0)}to{opacity:1;transform:translate3d(0,0,0)}}
+.oxf-view.is-planning-compact .oxf-planning-workspace { grid-template-columns:280px minmax(0,620px); }
+.oxf-view.is-planning-narrow .oxf-planning-workspace { grid-template-columns:minmax(0,1fr); }
+.oxf-view.is-planning-narrow .oxf-planning-summary { width:100%; grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:auto; }
+.oxf-view.is-planning-narrow .oxf-planning-lists { grid-template-columns:minmax(0,1fr); }
+.oxf-view.is-planning-narrow .oxf-planning-year-card { width:100%; }
+.oxf-view.is-planning-narrow .oxf-planning-months { grid-template-columns:repeat(4,minmax(0,1fr)); }
+.oxf-view.is-planning-narrow .oxf-planning-overview { height:auto; min-height:120px; grid-template-columns:minmax(0,1fr); }
+.oxf-view.is-planning-narrow .oxf-planning-overview-metrics,.oxf-view.is-planning-narrow .oxf-planning-overview-fact { min-height:100px; }
+.oxf-view.is-planning-narrow .oxf-year-plan-grid { grid-template-columns:minmax(0,1fr); }
 @keyframes oxf-inspector-drop{from{opacity:.55;transform:translate3d(0,-8px,0)}to{opacity:1;transform:translate3d(0,0,0)}}
 @media(prefers-reduced-motion:reduce){.oxf-view .oxf-planning-inspector{animation:none}}
+@media(max-width:600px){.oxf-view .oxf-planning-months{grid-template-columns:repeat(3,minmax(0,1fr))}.oxf-view .oxf-planning-overview-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.oxf-view .oxf-planning-overview-metric:nth-child(2){border-right:0}.oxf-view .oxf-planning-overview-metric:nth-child(-n+2){border-bottom:1px solid var(--oxf-line)}.oxf-view .oxf-planning-actions{flex-wrap:wrap}.oxf-view .oxf-year-control{grid-template-columns:32px minmax(110px,1fr) 32px 32px;flex:1 1 auto}.oxf-view .oxf-planning-timeline-row{grid-template-columns:30px 22px minmax(0,1fr) 26px}.oxf-view .oxf-planning-timeline-row>b{grid-column:3}.oxf-view .oxf-planning-timeline-row>button:first-of-type{grid-column:4;grid-row:1}.oxf-view .oxf-planning-timeline-row>button:last-child{grid-column:4;grid-row:2}.oxf-view .oxf-year-plan-month{grid-template-columns:minmax(0,1fr);gap:7px}.oxf-view .oxf-year-plan-values{text-align:left}}
 .oxf-modal-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:24px; }
 .oxf-account-icon-select { display:inline-flex; align-items:center; gap:8px; min-width:112px; justify-content:center; }
 .oxf-account-icon-select-preview { display:inline-flex; align-items:center; }
@@ -280,13 +407,34 @@
 .oxf-excel-import-modal { width:min(680px,calc(100vw - 32px)); }
 .oxf-excel-import-modal input[type="file"] { width:100%; margin-top:12px; padding:14px; border:1px dashed var(--background-modifier-border); border-radius:10px; }
 .oxf-excel-file-name { margin:0 0 14px; color:var(--text-muted); }
+.oxf-month-summary-modal { width:min(760px,calc(100vw - 32px)); }
+.oxf-month-summary-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:20px; }
+.oxf-month-summary-heading h2 { margin:0; }
+.oxf-month-summary-heading p { margin:5px 0 0; color:var(--text-muted); font-size:var(--font-ui-smaller); }
+.oxf-month-summary-heading>button { display:grid; width:34px; height:34px; place-items:center; padding:0; }
+.oxf-month-summary-modal .oxf-accuracy { padding:18px; border:1px solid var(--background-modifier-border); border-radius:var(--radius-l); background:var(--background-secondary); }
+.oxf-month-summary-modal .oxf-accuracy-marker { box-shadow:0 0 0 2px var(--background-secondary); }
+.oxf-month-summary-totals { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin:12px 0; }
+.oxf-month-summary-totals>div { display:grid; gap:5px; padding:12px; border:1px solid var(--background-modifier-border); border-radius:var(--radius-m); }
+.oxf-month-summary-totals span,.oxf-month-summary-totals small { color:var(--text-muted); font-size:var(--font-ui-smaller); }
+.oxf-month-summary-totals strong { font-size:18px; font-variant-numeric:tabular-nums; }
+.oxf-month-summary-table { display:grid; grid-template-columns:minmax(120px,1fr) repeat(3,minmax(90px,auto)); max-height:320px; overflow:auto; border:1px solid var(--background-modifier-border); border-radius:var(--radius-m); }
+.oxf-month-summary-table>* { padding:9px 12px; border-bottom:1px solid var(--background-modifier-border); font-size:var(--font-ui-small); }
+.oxf-month-summary-table>*:not(:nth-child(4n+1)) { text-align:right; font-variant-numeric:tabular-nums; }
+.oxf-month-summary-table>strong { position:sticky; top:0; z-index:1; color:var(--text-muted); background:var(--background-secondary); font-size:var(--font-ui-smaller); }
+.oxf-month-summary-table .is-over { color:var(--text-error); }
+.oxf-month-summary-table .is-under { color:var(--text-success); }
+.oxf-month-summary-empty { color:var(--text-muted); text-align:center; }
+.oxf-month-summary-modal .oxf-month-summary-export { display:grid; width:40px; min-width:0; height:auto; align-self:stretch; flex:0 0 40px; place-items:center; padding:0; color:var(--interactive-accent); }
+.oxf-month-summary-modal .oxf-month-summary-export svg { width:18px; height:18px; }
+@media(max-width:600px){.oxf-month-summary-totals{grid-template-columns:1fr}.oxf-month-summary-table{grid-template-columns:minmax(100px,1fr) repeat(3,minmax(72px,auto))}.oxf-month-summary-table>*{padding:7px 8px;font-size:10px}}
 .oxf-excel-summary { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
 .oxf-excel-summary>div { padding:12px; border-radius:10px; background:var(--background-secondary); }
 .oxf-excel-errors { max-height:240px; overflow:auto; padding:12px 12px 12px 32px; border-radius:10px; color:var(--text-error); background:var(--background-secondary); }
 .oxf-transaction-modal input[type="number"],.oxf-transaction-modal input[type="datetime-local"] { width:190px; }
 
 @media(max-width:900px){.oxf-main{padding-top:14px}.oxf-finance-hero{grid-template-columns:1fr}.oxf-finance-hero>.oxf-quick-actions{grid-column:1}.oxf-context-grid{grid-template-columns:1fr}.oxf-middle-grid{grid-template-columns:1fr}.oxf-summary-cards{grid-template-columns:1fr 1fr}.oxf-balance-card{grid-column:1/-1}}
-@media(max-width:600px){.oxf-main{padding:12px 10px 40px}.oxf-topbar{align-items:stretch;flex-direction:column}.oxf-period-control{justify-content:flex-end}.oxf-finance-hero{gap:20px;padding:18px}.oxf-hero-balance{font-size:38px}.oxf-hero-metrics{grid-template-columns:1fr}.oxf-quick-actions,.oxf-accounts-actions{display:grid;grid-template-columns:repeat(3,1fr)}.oxf-quick-actions button,.oxf-accounts-actions button{min-width:0;justify-content:center;padding:7px}.oxf-quick-actions button>span:last-child,.oxf-accounts-actions button>span:last-child{display:none}.oxf-category-body{grid-template-columns:1fr;justify-items:center}.oxf-category-legend{width:100%}.oxf-analytics-header{align-items:stretch;flex-direction:column}.oxf-segmented-control{display:grid;grid-template-columns:repeat(3,1fr)}.oxf-summary-cards,.oxf-planning-summary,.oxf-debt-summary{grid-template-columns:1fr}.oxf-balance-card{grid-column:auto}.oxf-card{padding:16px;border-radius:14px}.oxf-bars-chart{height:210px}.oxf-heatmap-weekdays,.oxf-heatmap{gap:4px}.oxf-heatmap-cell,.oxf-heatmap-blank{min-height:36px;border-radius:7px}.oxf-heatmap-cell{padding:5px}.oxf-accounts-heading,.oxf-planning-heading{align-items:flex-start;flex-direction:column}.oxf-accounts-heading>button{width:100%}.oxf-planning-actions{width:100%;justify-content:space-between}.oxf-account-row,.oxf-debt-row{grid-template-columns:40px minmax(0,1fr) 38px;gap:10px}.oxf-account-row .oxf-account-balance,.oxf-debt-amount{grid-column:2;text-align:left}.oxf-account-transfer{grid-column:2}.oxf-account-more{grid-column:3;grid-row:1}.oxf-planned-transfer{grid-template-columns:28px minmax(0,1fr) 30px}.oxf-planned-transfer>b{grid-column:2}.oxf-history-columns{display:none}.oxf-history-row{grid-template-columns:1fr auto;gap:5px 12px}.oxf-history-row>span{display:none}.oxf-history-row time{grid-column:1;text-align:left}.oxf-history-row b{grid-column:2;grid-row:1}.oxf-history-heading{align-items:flex-start}.oxf-history-heading>div{flex-direction:column}}
+@media(max-width:600px){.oxf-main{padding:12px 10px 40px}.oxf-topbar{align-items:stretch;flex-direction:column}.oxf-period-control{justify-content:flex-end}.oxf-finance-hero{gap:20px;padding:18px}.oxf-hero-balance{font-size:38px}.oxf-hero-metrics{grid-template-columns:1fr}.oxf-quick-actions,.oxf-accounts-actions{display:grid;grid-template-columns:repeat(3,1fr)}.oxf-quick-actions button,.oxf-accounts-actions button{min-width:0;justify-content:center;padding:7px}.oxf-quick-actions button>span:last-child,.oxf-accounts-actions button>span:last-child{display:none}.oxf-category-body{grid-template-columns:1fr;justify-items:center}.oxf-category-legend{width:100%}.oxf-analytics-header{align-items:stretch;flex-direction:column}.oxf-segmented-control{display:grid;grid-template-columns:repeat(3,1fr)}.oxf-summary-cards,.oxf-planning-summary,.oxf-debt-summary{grid-template-columns:1fr}.oxf-balance-card{grid-column:auto}.oxf-card{padding:16px;border-radius:14px}.oxf-bars-chart{height:210px}.oxf-heatmap-weekdays,.oxf-heatmap{gap:4px}.oxf-heatmap-cell,.oxf-heatmap-blank{min-height:36px;border-radius:7px}.oxf-heatmap-cell{padding:5px}.oxf-accounts-heading,.oxf-planning-heading{align-items:flex-start;flex-direction:column}.oxf-accounts-heading>button{width:100%}.oxf-planning-actions{width:100%;justify-content:space-between}.oxf-account-row,.oxf-debt-row{grid-template-columns:40px minmax(0,1fr) 38px;gap:10px}.oxf-account-row .oxf-account-balance,.oxf-debt-amount{grid-column:2;text-align:left}.oxf-account-transfer{grid-column:2}.oxf-account-more{grid-column:3;grid-row:1}.oxf-planned-transfer,.oxf-planned-income{grid-template-columns:28px minmax(0,1fr) 30px}.oxf-planned-transfer>b,.oxf-planned-income>b{grid-column:2}.oxf-history-columns{display:none}.oxf-history-row{grid-template-columns:1fr auto;gap:5px 12px}.oxf-history-row>span{display:none}.oxf-history-row time{grid-column:1;text-align:left}.oxf-history-row b{grid-column:2;grid-row:1}.oxf-history-heading{align-items:flex-start}.oxf-history-heading>div{flex-direction:column}}
 
 /* Настройки следуют общему стилю плагинов Oxill: системный заголовок
    раздела остаётся снаружи, а нативные строки Obsidian собраны в карточку. */

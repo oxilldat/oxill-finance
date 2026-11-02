@@ -8,21 +8,25 @@ import { FinanceLocale, setFinanceLocale, t } from "./i18n";
 export interface OxillFinanceSettings {
   selectedCategories: string[];
   customCategories: string[];
+  hiddenPlanningCategories: string[];
   language: FinanceLocale;
   operationsFolder: string;
   accountsFolder: string;
   planningFolder: string;
   debtsFolder: string;
+  autoRecalculateMonthSummary: boolean;
 }
 
 export const DEFAULT_SETTINGS: OxillFinanceSettings = {
   selectedCategories: [],
   customCategories: [],
+  hiddenPlanningCategories: [],
   language: "ru",
   operationsFolder: "Финансы/Операции",
   accountsFolder: "Финансы/Счета",
   planningFolder: "Финансы/Планирование",
   debtsFolder: "Финансы/Долги",
+  autoRecalculateMonthSummary: true,
 };
 
 type FolderSettingKey = "operationsFolder" | "accountsFolder" | "planningFolder" | "debtsFolder";
@@ -30,10 +34,12 @@ type FolderSettingKey = "operationsFolder" | "accountsFolder" | "planningFolder"
 export function normalizeFinanceSettings(settings: OxillFinanceSettings): OxillFinanceSettings {
   return {
     ...settings,
+    hiddenPlanningCategories: Array.isArray(settings.hiddenPlanningCategories) ? [...new Set(settings.hiddenPlanningCategories.filter((value): value is string => typeof value === "string" && value.trim().length > 0))] : [],
     operationsFolder: normalizeFolder(settings.operationsFolder, DEFAULT_SETTINGS.operationsFolder),
     accountsFolder: normalizeFolder(settings.accountsFolder, DEFAULT_SETTINGS.accountsFolder),
     planningFolder: normalizeFolder(settings.planningFolder, DEFAULT_SETTINGS.planningFolder),
     debtsFolder: normalizeFolder(settings.debtsFolder, DEFAULT_SETTINGS.debtsFolder),
+    autoRecalculateMonthSummary: settings.autoRecalculateMonthSummary !== false,
   };
 }
 
@@ -67,22 +73,36 @@ export class FinanceSettingTab extends PluginSettingTab {
       {
         type: "group",
         cls: "oxf-finance-settings-group",
-        items: [{
-          name: t("Язык", "Language"),
-          desc: t("Язык интерфейса Oxill Finance.", "Oxill Finance interface language."),
-          render: (setting) => {
-            setting.addDropdown((dropdown) => dropdown
-              .addOption("ru", "Русский")
-              .addOption("en", "English")
-              .setValue(this.plugin.settings.language)
-              .onChange(async (value) => {
-                this.plugin.settings.language = value === "en" ? "en" : "ru";
-                setFinanceLocale(this.plugin.settings.language);
-                await this.plugin.saveFinanceSettings();
-                this.update();
-              }));
+        items: [
+          {
+            name: t("Язык", "Language"),
+            desc: t("Язык интерфейса Oxill Finance.", "Oxill Finance interface language."),
+            render: (setting) => {
+              setting.addDropdown((dropdown) => dropdown
+                .addOption("ru", "Русский")
+                .addOption("en", "English")
+                .setValue(this.plugin.settings.language)
+                .onChange(async (value) => {
+                  this.plugin.settings.language = value === "en" ? "en" : "ru";
+                  setFinanceLocale(this.plugin.settings.language);
+                  await this.plugin.saveFinanceSettings();
+                  this.update();
+                }));
+            },
           },
-        }],
+          {
+            name: t("Автоматически пересчитывать итоги", "Recalculate summaries automatically"),
+            desc: t("Обновлять план и факт завершённого месяца при каждом открытии отчёта.", "Refresh the plan and actuals whenever a completed month report is opened."),
+            render: (setting) => {
+              setting.addToggle((toggle) => toggle
+                .setValue(this.plugin.settings.autoRecalculateMonthSummary)
+                .onChange(async (value) => {
+                  this.plugin.settings.autoRecalculateMonthSummary = value;
+                  await this.plugin.saveFinanceSettings();
+                }));
+            },
+          },
+        ],
       },
       {
         type: "group",
@@ -101,7 +121,7 @@ export class FinanceSettingTab extends PluginSettingTab {
           this.folderDefinition(
             "planningFolder",
             t("Планирование", "Planning"),
-            t("Заметки будущих расходов и переводов.", "Notes for future expenses and transfers."),
+            t("Заметки будущих доходов, расходов и переводов.", "Notes for future income, expenses, and transfers."),
           ),
           this.folderDefinition(
             "debtsFolder",
@@ -222,9 +242,22 @@ export class FinanceSettingTab extends PluginSettingTab {
 
     for (const category of this.plugin.getAvailableCategories()) {
       const isCustom = this.plugin.settings.customCategories.includes(category);
+      const isHidden = this.plugin.settings.hiddenPlanningCategories.includes(category);
       new Setting(items)
         .setName(category)
-        .setDesc(isCustom ? t("Добавлена вручную", "Added manually") : t("Найдена в финансовых заметках", "Found in finance notes"))
+        .setDesc(isHidden
+          ? t("Скрыта из таблицы планирования", "Hidden from the planning table")
+          : isCustom ? t("Добавлена вручную", "Added manually") : t("Найдена в финансовых заметках", "Found in finance notes"))
+        .addExtraButton((button) => button
+          .setIcon(isHidden ? "eye-off" : "eye")
+          .setTooltip(isHidden ? t("Показать в планировании", "Show in planning") : t("Скрыть из планирования", "Hide from planning"))
+          .onClick(async () => {
+            this.plugin.settings.hiddenPlanningCategories = isHidden
+              ? this.plugin.settings.hiddenPlanningCategories.filter((name) => name !== category)
+              : [...this.plugin.settings.hiddenPlanningCategories, category];
+            await this.plugin.saveFinanceSettings();
+            refresh();
+          }))
         .addExtraButton((button) => button
           .setIcon("trash-2")
           .setTooltip(t("Удалить категорию", "Delete category"))

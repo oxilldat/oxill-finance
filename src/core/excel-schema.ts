@@ -1,6 +1,6 @@
 import type { FinanceLocale } from "../i18n";
 
-export type ExcelSheetKind = "operations" | "accounts" | "planning" | "plannedTransfers" | "debts" | "categories" | "instructions";
+export type ExcelSheetKind = "operations" | "accounts" | "planning" | "incomePlanning" | "plannedTransfers" | "debts" | "categories" | "instructions";
 
 const ENGLISH_HEADERS: Record<ExcelSheetKind, string[]> = {
   operations: [
@@ -11,6 +11,10 @@ const ENGLISH_HEADERS: Record<ExcelSheetKind, string[]> = {
   planning: [
     "Finance ID", "Title", "Amount", "Due date", "Category", "Account ID", "Account",
     "Completion action", "Status", "Paid at", "Note path",
+  ],
+  incomePlanning: [
+    "Finance ID", "Title", "Amount", "Expected date", "Category", "Account ID", "Account",
+    "Completion action", "Status", "Received at", "Note path",
   ],
   plannedTransfers: ["Finance ID", "Amount", "Due date", "From account ID", "From account", "To account ID", "To account", "Status", "Paid at", "Note path"],
   debts: ["Finance ID", "Person note", "Icon", "Signed amount", "Comment", "Note path"],
@@ -28,6 +32,10 @@ const RUSSIAN_HEADERS: Record<ExcelSheetKind, string[]> = {
   planning: [
     "ID", "Название", "Сумма", "Срок", "Категория", "ID счёта", "Счёт",
     "Действие при выполнении", "Статус", "Дата оплаты", "Путь к заметке",
+  ],
+  incomePlanning: [
+    "ID", "Название", "Сумма", "Ожидаемая дата", "Категория", "ID счёта", "Счёт",
+    "Действие при получении", "Статус", "Дата получения", "Путь к заметке",
   ],
   plannedTransfers: ["ID", "Сумма", "Срок", "ID счёта списания", "Счёт списания", "ID счёта зачисления", "Счёт зачисления", "Статус", "Дата выполнения", "Путь к заметке"],
   debts: ["ID", "Заметка человека", "Иконка", "Сумма со знаком", "Комментарий", "Путь к заметке"],

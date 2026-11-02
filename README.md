@@ -11,7 +11,7 @@ Local-first personal finance planning for Obsidian. Oxill Finance turns Markdown
 - Shows income, expenses, balance, category breakdown, cash-flow dynamics, and operation history.
 - Supports custom accounts, account-to-account transfers, and account balances calculated from notes.
 - Provides yearly expense planning with a category-by-month heatmap.
-- Plans future account-to-account transfers and turns completed plans into ordinary transfers.
+- Plans future income and account-to-account transfers, and turns completed plans into ordinary operations.
 - Tracks personal debts linked to people notes; positive amounts are owed to you and negative amounts are owed by you.
 - Creates and edits ordinary Markdown files instead of hiding financial records in a proprietary database.
 - Imports and exports accounts, operations, transfers, plans, debts, and categories as a single Excel workbook.
@@ -53,7 +53,7 @@ The destination folder for each note type can be changed independently in the pl
 
 Use **Settings → Oxill Finance** or the command palette to export all finance data, download an empty statement template, or import a completed `.xlsx` workbook as Markdown notes.
 
-The workbook contains **Operations**, **Accounts**, **Planning**, **Planned transfers**, **Debts**, **Categories**, and **Instructions** sheets. For a bank statement, paste one transaction per row into **Operations**. Required values are documented in the workbook. Dates remain Excel dates and amounts remain numeric.
+The workbook contains **Operations**, **Accounts**, **Planning**, **Income planning**, **Planned transfers**, **Debts**, **Categories**, and **Instructions** sheets. For a bank statement, paste one transaction per row into **Operations**. Required values are documented in the workbook. Dates remain Excel dates and amounts remain numeric.
 
 Column headings and workbook instructions follow the selected Oxill Finance interface language. Import remains bilingual and accepts both Russian and English headings, including files created by earlier plugin versions.
 
@@ -123,6 +123,24 @@ status: planned
 
 `completion: mark-only` only marks the plan as paid. `completion: create-expense` also creates an ordinary expense operation. Completed plans receive `status: paid` and `paid_at`.
 
+Planned income:
+
+```yaml
+---
+finance_type: income_plan
+finance_id: income-plan-example
+title: Salary
+amount: 120000
+due_date: "2027-01-10T12:00:00+03:00"
+category: Salary
+account_id: account-main
+completion: create-income
+status: planned
+---
+```
+
+`completion: create-income` creates an ordinary income operation when the plan is marked as received. The planning page uses pending income and expenses to calculate the forecast balance.
+
 Planned transfer:
 
 ```yaml
@@ -183,6 +201,7 @@ Oxill Finance — локальный инструмент финансового
 - обзор доходов, расходов, баланса, категорий, динамики и истории операций;
 - пользовательские счета и переводы между ними без ложных доходов и расходов;
 - годовое планирование будущих расходов в виде тепловой карты;
+- планирование ожидаемых доходов с датой, категорией и счётом зачисления;
 - планирование будущих переводов между счетами;
 - учёт долгов со ссылками на заметки людей и суммами со знаком;
 - импорт и экспорт операций, счетов, переводов, планов, долгов и категорий через единый Excel-файл;

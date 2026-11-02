@@ -1,6 +1,6 @@
 import { App, normalizePath, TFile } from "obsidian";
 
-import { ExpensePlan, ExpensePlanCompletion, ExpensePlanStatus, FinanceAccount, FinanceDebt, FinanceIndex, FinanceTransaction, FinanceTransfer, PlannedTransfer, TransactionKind } from "./types";
+import { ExpensePlan, ExpensePlanCompletion, ExpensePlanStatus, FinanceAccount, FinanceDebt, FinanceIndex, FinanceMonthSummary, FinanceTransaction, FinanceTransfer, IncomePlan, IncomePlanCompletion, MonthSummaryCategory, PlannedTransfer, TransactionKind } from "./types";
 import { t } from "./i18n";
 import { normalizeAccountIcon } from "./core/account-icons";
 
@@ -30,8 +30,31 @@ export interface NewExpensePlan {
   status?: ExpensePlanStatus;
   paidAt?: Date;
 }
+export interface NewIncomePlan {
+  id?: string;
+  title: string;
+  amount: number;
+  dueDate: Date;
+  category: string;
+  accountId?: string;
+  completion: IncomePlanCompletion;
+  status?: ExpensePlanStatus;
+  paidAt?: Date;
+}
 export interface NewPlannedTransfer { id?: string; amount: number; dueDate: Date; fromAccountId: string; toAccountId: string; status?: ExpensePlanStatus; paidAt?: Date; }
 export interface NewDebt { id?: string; personPath: string; icon: string; amount: number; comment?: string; }
+export interface NewMonthSummary {
+  id?: string;
+  period: string;
+  plannedIncome: number;
+  actualIncome: number;
+  plannedExpenses: number;
+  actualExpenses: number;
+  plannedTransfers: number;
+  actualTransfers: number;
+  categories: MonthSummaryCategory[];
+  generatedAt?: Date;
+}
 
 export interface FinanceStorageFolders {
   operations: string;
@@ -41,7 +64,7 @@ export interface FinanceStorageFolders {
 }
 
 export class TransactionStore {
-  private index: FinanceIndex = { transactions: [], accounts: [], transfers: [], plans: [], plannedTransfers: [], debts: [], issues: [] };
+  private index: FinanceIndex = { transactions: [], accounts: [], transfers: [], plans: [], incomePlans: [], plannedTransfers: [], debts: [], monthSummaries: [], issues: [] };
   private listeners = new Set<() => void>();
 
   constructor(private readonly app: App, private readonly getFolders: () => FinanceStorageFolders) {}
@@ -186,6 +209,58 @@ export class TransactionStore {
     }
   }
 
+  async createIncomePlan(input: NewIncomePlan): Promise<string> {
+    const folder = this.getFolders().planning;
+    await ensureFolder(this.app, folder);
+    const id = input.id ?? `income-plan-${formatIdDate(input.dueDate)}-${Math.random().toString(36).slice(2, 6)}`;
+    const content = [
+      "---", "finance_type: income_plan", `finance_id: ${quote(id)}`,
+      `title: ${quote(input.title)}`, `amount: ${input.amount}`,
+      `due_date: ${quote(input.dueDate.toISOString())}`, `category: ${quote(input.category)}`,
+      ...(input.accountId ? [`account_id: ${quote(input.accountId)}`] : []),
+      `completion: ${input.completion}`, `status: ${input.status ?? "planned"}`,
+      ...(input.paidAt ? [`paid_at: ${quote(input.paidAt.toISOString())}`] : []),
+      "---", "", `# ${input.title}`, "",
+    ].join("\n");
+    const path = normalizePath(`${folder}/${safeFileName(input.title)}.md`);
+    await this.app.vault.create(await availablePath(this.app, path), content);
+    return id;
+  }
+
+  async updateIncomePlan(plan: IncomePlan, input: NewIncomePlan): Promise<void> {
+    await this.app.fileManager.processFrontMatter(plan.file, (data) => {
+      setFrontmatterValue(data, "title", input.title);
+      setFrontmatterValue(data, "amount", input.amount);
+      setFrontmatterValue(data, "due_date", input.dueDate.toISOString());
+      setFrontmatterValue(data, "category", input.category);
+      setFrontmatterValue(data, "completion", input.completion);
+      if (input.accountId) setFrontmatterValue(data, "account_id", input.accountId);
+      else deleteFrontmatterValue(data, "account_id");
+    });
+  }
+
+  async deleteIncomePlan(plan: IncomePlan): Promise<void> { await this.app.fileManager.trashFile(plan.file); }
+
+  async completeIncomePlan(plan: IncomePlan): Promise<void> {
+    if (plan.status === "paid") return;
+    plan.status = "paid";
+    try {
+      if (plan.completion === "create-income") {
+        await this.createTransaction({
+          kind: "income", amount: plan.amount, date: new Date(), category: plan.category,
+          comment: `${t("План", "Plan")}: ${plan.title}`, accountId: plan.accountId,
+        });
+      }
+      await this.app.fileManager.processFrontMatter(plan.file, (data) => {
+        setFrontmatterValue(data, "status", "paid");
+        setFrontmatterValue(data, "paid_at", new Date().toISOString());
+      });
+    } catch (error) {
+      plan.status = "planned";
+      throw error;
+    }
+  }
+
   async createPlannedTransfer(input: NewPlannedTransfer): Promise<string> {
     const folder = this.getFolders().planning;
     await ensureFolder(this.app, folder);
@@ -259,6 +334,23 @@ export class TransactionStore {
 
   async deleteDebt(debt: FinanceDebt): Promise<void> { await this.app.fileManager.trashFile(debt.file); }
 
+  async createMonthSummary(input: NewMonthSummary): Promise<FinanceMonthSummary> {
+    const folder = this.getFolders().planning;
+    await ensureFolder(this.app, folder);
+    const id = input.id ?? `month-summary-${input.period}`;
+    const generatedAt = input.generatedAt ?? new Date();
+    const content = monthSummaryContent(id, input, generatedAt);
+    const path = normalizePath(`${folder}/${t("Итог", "Summary")} ${input.period}.md`);
+    const file = await this.app.vault.create(await availablePath(this.app, path), content);
+    return { ...input, id, generatedAt, file };
+  }
+
+  async updateMonthSummary(summary: FinanceMonthSummary, input: NewMonthSummary): Promise<FinanceMonthSummary> {
+    const generatedAt = new Date();
+    await this.app.vault.modify(summary.file, monthSummaryContent(summary.id, input, generatedAt));
+    return { ...input, id: summary.id, generatedAt, file: summary.file };
+  }
+
   async moveCategory(source: string, target: string): Promise<void> {
     if (!source || !target || source === target) {
       throw new Error(t("Выберите другую категорию для переноса", "Select a different destination category"));
@@ -284,8 +376,10 @@ export function readFinanceIndex(app: App): FinanceIndex {
   const accounts: FinanceAccount[] = [];
   const transfers: FinanceTransfer[] = [];
   const plans: ExpensePlan[] = [];
+  const incomePlans: IncomePlan[] = [];
   const plannedTransfers: PlannedTransfer[] = [];
   const debts: FinanceDebt[] = [];
+  const monthSummaries: FinanceMonthSummary[] = [];
   const issues: FinanceIndex["issues"] = [];
   for (const file of app.vault.getMarkdownFiles()) {
     const data = toFrontmatter(app.metadataCache.getFileCache(file)?.frontmatter);
@@ -294,8 +388,10 @@ export function readFinanceIndex(app: App): FinanceIndex {
       else if (data?.finance_type === "account") accounts.push(parseAccount(file, data));
       else if (data?.finance_type === "transfer") transfers.push(parseTransfer(file, data));
       else if (data?.finance_type === "expense_plan") plans.push(parseExpensePlan(file, data));
+      else if (data?.finance_type === "income_plan") incomePlans.push(parseIncomePlan(file, data));
       else if (data?.finance_type === "transfer_plan") plannedTransfers.push(parsePlannedTransfer(file, data));
       else if (data?.finance_type === "debt") debts.push(parseDebt(file, data));
+      else if (data?.finance_type === "month_summary") monthSummaries.push(parseMonthSummary(file, data));
     } catch (error) {
       issues.push({ path: file.path, message: error instanceof Error ? error.message : t("Некорректная операция", "Invalid transaction") });
     }
@@ -303,8 +399,10 @@ export function readFinanceIndex(app: App): FinanceIndex {
   transactions.sort((left, right) => right.date.getTime() - left.date.getTime());
   transfers.sort((left, right) => right.date.getTime() - left.date.getTime());
   plans.sort((left, right) => left.dueDate.getTime() - right.dueDate.getTime());
+  incomePlans.sort((left, right) => left.dueDate.getTime() - right.dueDate.getTime());
   plannedTransfers.sort((left, right) => left.dueDate.getTime() - right.dueDate.getTime());
   debts.sort((left, right) => personNameFromPath(left.personPath).localeCompare(personNameFromPath(right.personPath), "ru"));
+  monthSummaries.sort((left, right) => right.period.localeCompare(left.period));
   const accountMap = new Map(accounts.map((account) => [account.id, account]));
   for (const transaction of transactions) {
     if (!transaction.accountId) continue;
@@ -318,7 +416,7 @@ export function readFinanceIndex(app: App): FinanceIndex {
     if (to) to.balance += transfer.amount;
   }
   accounts.sort((left, right) => left.name.localeCompare(right.name, "ru"));
-  return { transactions, accounts, transfers, plans, plannedTransfers, debts, issues };
+  return { transactions, accounts, transfers, plans, incomePlans, plannedTransfers, debts, monthSummaries, issues };
 }
 
 function parseTransaction(file: TFile, data: Frontmatter): FinanceTransaction {
@@ -382,6 +480,20 @@ function parseExpensePlan(file: TFile, data: Frontmatter): ExpensePlan {
   };
 }
 
+function parseIncomePlan(file: TFile, data: Frontmatter): IncomePlan {
+  const amount = positiveAmount(data.amount);
+  const dueDate = validDate(requiredString(data.due_date, "due_date"));
+  const status = planStatus(data.status);
+  const completion = optionalString(data.completion) ?? "mark-only";
+  if (completion !== "mark-only" && completion !== "create-income") throw new Error(t("Некорректный completion", "Invalid completion value"));
+  const paidAtValue = optionalString(data.paid_at);
+  return {
+    id: requiredString(data.finance_id, "finance_id"), title: requiredString(data.title, "title"), amount, dueDate,
+    category: optionalString(data.category) ?? t("Без категории", "Uncategorized"), accountId: optionalString(data.account_id),
+    status, completion, paidAt: paidAtValue ? validDate(paidAtValue) : undefined, file,
+  };
+}
+
 function parsePlannedTransfer(file: TFile, data: Frontmatter): PlannedTransfer {
   const amount = positiveAmount(data.amount);
   const dueDate = validDate(requiredString(data.due_date, "due_date"));
@@ -404,9 +516,47 @@ function parseDebt(file: TFile, data: Frontmatter): FinanceDebt {
   };
 }
 
+function parseMonthSummary(file: TFile, data: Frontmatter): FinanceMonthSummary {
+  const categoriesValue = optionalString(data.categories_json) ?? "[]";
+  const parsed: unknown = JSON.parse(categoriesValue);
+  if (!Array.isArray(parsed)) throw new Error(t("Некорректные категории итога", "Invalid summary categories"));
+  const categories = parsed.filter(isMonthSummaryCategory);
+  return {
+    id: requiredString(data.finance_id, "finance_id"),
+    period: requiredString(data.period, "period"),
+    plannedIncome: nonNegativeAmount(data.planned_income), actualIncome: nonNegativeAmount(data.actual_income),
+    plannedExpenses: nonNegativeAmount(data.planned_expenses), actualExpenses: nonNegativeAmount(data.actual_expenses),
+    plannedTransfers: nonNegativeAmount(data.planned_transfers), actualTransfers: nonNegativeAmount(data.actual_transfers),
+    categories, generatedAt: validDate(requiredString(data.generated_at, "generated_at")), file,
+  };
+}
+
+function monthSummaryContent(id: string, input: NewMonthSummary, generatedAt: Date): string {
+  return [
+    "---", "finance_type: month_summary", `finance_id: ${quote(id)}`, `period: ${quote(input.period)}`,
+    `planned_income: ${input.plannedIncome}`, `actual_income: ${input.actualIncome}`,
+    `planned_expenses: ${input.plannedExpenses}`, `actual_expenses: ${input.actualExpenses}`,
+    `planned_transfers: ${input.plannedTransfers}`, `actual_transfers: ${input.actualTransfers}`,
+    `categories_json: ${quote(JSON.stringify(input.categories))}`, `generated_at: ${quote(generatedAt.toISOString())}`,
+    "---", "", `# ${t("Итог месяца", "Month summary")}: ${input.period}`, "",
+  ].join("\n");
+}
+
+function isMonthSummaryCategory(value: unknown): value is MonthSummaryCategory {
+  if (typeof value !== "object" || value === null) return false;
+  const row = value as Record<string, unknown>;
+  return typeof row.name === "string" && Number.isFinite(row.planned) && Number.isFinite(row.actual);
+}
+
 function positiveAmount(value: unknown): number {
   const amount = Number(value);
   if (!Number.isFinite(amount) || amount <= 0) throw new Error(t("amount должен быть числом больше нуля", "amount must be a number greater than zero"));
+  return amount;
+}
+
+function nonNegativeAmount(value: unknown): number {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount < 0) throw new Error(t("Сумма должна быть неотрицательным числом", "Amount must be a non-negative number"));
   return amount;
 }
 
