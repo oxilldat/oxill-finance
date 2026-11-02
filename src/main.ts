@@ -64,6 +64,14 @@ export default class OxillFinancePlugin extends Plugin {
       editAccount: (account) => new AccountModal(this.app, this.store, () => this.scheduleRefresh(120), account).open(),
       transfer: (accountId) => new TransferModal(this.app, this.store, () => this.scheduleRefresh(120), accountId).open(),
       deleteAccount: (account) => this.openDeleteAccountModal(account),
+      reorderAccounts: async (accountIds) => {
+        try {
+          await this.store.reorderAccounts(accountIds);
+        } catch (error) {
+          new Notice(error instanceof Error ? error.message : t("Не удалось сохранить порядок счетов", "Could not save the account order"));
+          this.scheduleRefresh(120);
+        }
+      },
       createDebt: () => new DebtModal(this.app, this.store, () => this.scheduleRefresh(120)).open(),
       editDebt: (debt) => new DebtModal(this.app, this.store, () => this.scheduleRefresh(120), debt).open(),
       deleteDebt: (debt) => new DeleteDebtModal(this.app, this.store, debt, () => this.scheduleRefresh(120)).open(),

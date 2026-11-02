@@ -18,6 +18,7 @@ export interface FinanceViewActions {
   editAccount: (account: FinanceAccount) => void;
   transfer: (accountId?: string) => void;
   deleteAccount: (account: FinanceAccount) => void;
+  reorderAccounts: (accountIds: string[]) => Promise<void>;
   createDebt: () => void;
   editDebt: (debt: FinanceDebt) => void;
   deleteDebt: (debt: FinanceDebt) => void;
@@ -59,6 +60,7 @@ export class FinanceView extends ItemView {
   private planningMonthPickerOpen = false;
   private planningYearOverview = false;
   private planningPanel: "expenses" | "timeline" = "expenses";
+  private draggedAccountId?: string;
   private activeSection: NavigationItem = "overview";
   private unsubscribe?: () => void;
   private resizeObserver?: ResizeObserver;
@@ -408,7 +410,7 @@ export class FinanceView extends ItemView {
     }
 
     const grid = container.createDiv({ cls: "oxf-accounts-list" });
-    for (const account of accounts) this.renderAccountCard(grid, account, accounts.length);
+    for (const account of accounts) this.renderAccountCard(grid, account, accounts);
   }
 
   private renderPlanning(container: HTMLElement): void {
@@ -713,8 +715,44 @@ export class FinanceView extends ItemView {
     menu.showAtMouseEvent(event);
   }
 
-  private renderAccountCard(container: HTMLElement, account: FinanceAccount, accountCount: number): void {
+  private renderAccountCard(container: HTMLElement, account: FinanceAccount, accounts: FinanceAccount[]): void {
     const card = container.createEl("section", { cls: "oxf-account-row" });
+    card.dataset.accountId = account.id;
+    const dragHandle = card.createEl("button", {
+      cls: "oxf-account-drag-handle",
+      attr: { type: "button", draggable: "true", "aria-label": t(`Переместить счёт ${account.name}`, `Move account ${account.name}`) },
+    });
+    setIcon(dragHandle, "grip-vertical");
+    dragHandle.addEventListener("dragstart", (event) => {
+      this.draggedAccountId = account.id;
+      card.addClass("is-dragging");
+      event.dataTransfer?.setData("text/plain", account.id);
+      if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+    });
+    dragHandle.addEventListener("dragend", () => {
+      this.draggedAccountId = undefined;
+      card.removeClass("is-dragging");
+      this.clearAccountDropIndicators(container);
+    });
+    card.addEventListener("dragover", (event) => {
+      if (!this.draggedAccountId || this.draggedAccountId === account.id) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+      this.clearAccountDropIndicators(container);
+      const after = event.clientY >= card.getBoundingClientRect().top + card.getBoundingClientRect().height / 2;
+      card.addClass(after ? "is-drop-after" : "is-drop-before");
+    });
+    card.addEventListener("drop", (event) => {
+      if (!this.draggedAccountId || this.draggedAccountId === account.id) return;
+      event.preventDefault();
+      const after = event.clientY >= card.getBoundingClientRect().top + card.getBoundingClientRect().height / 2;
+      const ids = accounts.map((item) => item.id).filter((id) => id !== this.draggedAccountId);
+      const targetIndex = ids.indexOf(account.id);
+      ids.splice(targetIndex + (after ? 1 : 0), 0, this.draggedAccountId);
+      this.draggedAccountId = undefined;
+      this.clearAccountDropIndicators(container);
+      void this.actions.reorderAccounts(ids);
+    });
     const icon = card.createSpan({ cls: "oxf-account-icon" });
     setIcon(icon, normalizeAccountIcon(account.icon));
     const identity = card.createDiv({ cls: "oxf-account-identity" });
@@ -722,10 +760,16 @@ export class FinanceView extends ItemView {
     identity.createSpan({ text: account.balance === 0 ? t("Нет средств", "No funds") : t("Доступно сейчас", "Available now") });
     card.createEl("strong", { cls: `oxf-account-balance${account.balance < 0 ? " is-negative" : ""}`, text: `${money(account.balance)} ₽` });
     const transfer = card.createEl("button", { cls: "oxf-account-transfer", text: t("Перевести", "Transfer"), attr: { type: "button" } });
-    transfer.disabled = accountCount < 2 || account.balance <= 0;
+    transfer.disabled = accounts.length < 2 || account.balance <= 0;
     transfer.addEventListener("click", () => this.actions.transfer(account.id));
     const more = card.createEl("button", { cls: "oxf-account-more", text: "•••", attr: { type: "button", "aria-label": t(`Действия со счётом ${account.name}`, `Actions for account ${account.name}`) } });
     more.addEventListener("click", (event) => this.showAccountMenu(event, account));
+  }
+
+  private clearAccountDropIndicators(container: HTMLElement): void {
+    for (const row of Array.from(container.querySelectorAll(".oxf-account-row"))) {
+      row.removeClass("is-drop-before", "is-drop-after");
+    }
   }
 
   private showAccountMenu(event: MouseEvent, account: FinanceAccount): void {

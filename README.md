@@ -9,7 +9,7 @@ Local-first personal finance planning for Obsidian. Oxill Finance turns Markdown
 ### What it does
 
 - Shows income, expenses, balance, category breakdown, cash-flow dynamics, and operation history.
-- Supports custom accounts, account-to-account transfers, and account balances calculated from notes.
+- Supports custom accounts, drag-and-drop account ordering, account-to-account transfers, and account balances calculated from notes.
 - Provides yearly expense planning with a category-by-month heatmap.
 - Plans future income and account-to-account transfers, and turns completed plans into ordinary operations.
 - Tracks personal debts linked to people notes; positive amounts are owed to you and negative amounts are owed by you.
@@ -199,7 +199,7 @@ Oxill Finance — локальный инструмент финансового
 ### Возможности
 
 - обзор доходов, расходов, баланса, категорий, динамики и истории операций;
-- пользовательские счета и переводы между ними без ложных доходов и расходов;
+- пользовательские счета с ручной сортировкой перетаскиванием и переводы между ними без ложных доходов и расходов;
 - годовое планирование будущих расходов в виде тепловой карты;
 - планирование ожидаемых доходов с датой, категорией и счётом зачисления;
 - планирование будущих переводов между счетами;

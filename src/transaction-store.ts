@@ -17,7 +17,7 @@ export interface NewTransaction {
   externalId?: string;
 }
 
-export interface NewAccount { id?: string; name: string; icon: string; }
+export interface NewAccount { id?: string; name: string; icon: string; order?: number; }
 export interface NewTransfer { id?: string; amount: number; date: Date; fromAccountId: string; toAccountId: string; comment?: string; externalId?: string; }
 export interface NewExpensePlan {
   id?: string;
@@ -114,9 +114,10 @@ export class TransactionStore {
     await ensureFolder(this.app, folder);
     const id = input.id ?? `account-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
     const icon = normalizeAccountIcon(input.icon);
+    const order = input.order ?? this.index.accounts.length;
     const content = [
       "---", "finance_type: account", `finance_id: ${quote(id)}`,
-      `account_name: ${quote(input.name)}`, `icon: ${quote(icon)}`, "---", "", `# ${input.name}`, "",
+      `account_name: ${quote(input.name)}`, `icon: ${quote(icon)}`, `account_order: ${order}`, "---", "", `# ${input.name}`, "",
     ].join("\n");
     const path = normalizePath(`${folder}/${safeFileName(input.name)}.md`);
     await this.app.vault.create(await availablePath(this.app, path), content);
@@ -133,6 +134,24 @@ export class TransactionStore {
   async deleteAccount(account: FinanceAccount): Promise<void> {
     if (Math.abs(account.balance) > 0.005) throw new Error(t("Сначала переведите все средства на другой счёт", "Transfer all funds to another account first"));
     await this.app.fileManager.trashFile(account.file);
+  }
+
+  async reorderAccounts(accountIds: string[]): Promise<void> {
+    const currentIds = this.index.accounts.map((account) => account.id);
+    if (accountIds.length !== currentIds.length || currentIds.some((id) => !accountIds.includes(id))) {
+      throw new Error(t("Не удалось сохранить порядок счетов", "Could not save the account order"));
+    }
+    const byId = new Map(this.index.accounts.map((account) => [account.id, account]));
+    for (const [order, id] of accountIds.entries()) {
+      const account = byId.get(id);
+      if (!account) continue;
+      await this.app.fileManager.processFrontMatter(account.file, (data) => {
+        setFrontmatterValue(data, "account_order", order);
+      });
+      account.order = order;
+    }
+    this.index.accounts.sort((left, right) => (left.order ?? Number.MAX_SAFE_INTEGER) - (right.order ?? Number.MAX_SAFE_INTEGER));
+    for (const listener of this.listeners) listener();
   }
 
   async createTransfer(input: NewTransfer): Promise<string> {
@@ -415,7 +434,10 @@ export function readFinanceIndex(app: App): FinanceIndex {
     if (from) from.balance -= transfer.amount;
     if (to) to.balance += transfer.amount;
   }
-  accounts.sort((left, right) => left.name.localeCompare(right.name, "ru"));
+  accounts.sort((left, right) => {
+    const orderDifference = (left.order ?? Number.MAX_SAFE_INTEGER) - (right.order ?? Number.MAX_SAFE_INTEGER);
+    return orderDifference || left.name.localeCompare(right.name, "ru");
+  });
   return { transactions, accounts, transfers, plans, incomePlans, plannedTransfers, debts, monthSummaries, issues };
 }
 
@@ -440,10 +462,12 @@ function parseTransaction(file: TFile, data: Frontmatter): FinanceTransaction {
 }
 
 function parseAccount(file: TFile, data: Frontmatter): FinanceAccount {
+  const rawOrder = Number(data.account_order);
   return {
     id: requiredString(data.finance_id, "finance_id"),
     name: requiredString(data.account_name, "account_name"),
     icon: normalizeAccountIcon(optionalString(data.icon)),
+    order: Number.isInteger(rawOrder) && rawOrder >= 0 ? rawOrder : undefined,
     balance: 0,
     file,
   };

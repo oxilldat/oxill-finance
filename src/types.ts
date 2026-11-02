@@ -19,6 +19,7 @@ export interface FinanceAccount {
   id: string;
   name: string;
   icon: string;
+  order?: number;
   balance: number;
   file: TFile;
 }
