@@ -16,16 +16,19 @@ import { createMonthSummaryWorkbook } from "./core/month-summary-excel";
 import { FinanceIndex } from "./types";
 import { createMonthSummarySnapshot, monthPeriod } from "./core/month-summary";
 import { MonthSummaryModal } from "./month-summary-modal";
+import { PersonNetworkConnector } from "./person-network-connector";
 
 export default class OxillFinancePlugin extends Plugin {
   private store!: TransactionStore;
   private refreshTimer?: number;
   private readonly pendingMonthSummaries = new Set<string>();
   settings: OxillFinanceSettings = DEFAULT_SETTINGS;
+  personNetwork!: PersonNetworkConnector;
 
   async onload(): Promise<void> {
     this.settings = normalizeFinanceSettings({ ...DEFAULT_SETTINGS, ...(await this.loadData() as Partial<OxillFinanceSettings> | null) });
     setFinanceLocale(this.settings.language);
+    this.personNetwork = new PersonNetworkConnector(this.app);
     this.store = new TransactionStore(this.app, () => this.getStorageFolders());
     this.registerView(VIEW_TYPE_FINANCE, (leaf) => new FinanceView(leaf, this.store, this.financeActions()));
     this.addSettingTab(new FinanceSettingTab(this.app, this));
@@ -72,8 +75,8 @@ export default class OxillFinancePlugin extends Plugin {
           this.scheduleRefresh(120);
         }
       },
-      createDebt: () => new DebtModal(this.app, this.store, () => this.scheduleRefresh(120)).open(),
-      editDebt: (debt) => new DebtModal(this.app, this.store, () => this.scheduleRefresh(120), debt).open(),
+      createDebt: () => new DebtModal(this.app, this.store, this.personNetwork, this.settings.personNetworkConnectorEnabled, () => this.scheduleRefresh(120)).open(),
+      editDebt: (debt) => new DebtModal(this.app, this.store, this.personNetwork, this.settings.personNetworkConnectorEnabled, () => this.scheduleRefresh(120), debt).open(),
       deleteDebt: (debt) => new DeleteDebtModal(this.app, this.store, debt, () => this.scheduleRefresh(120)).open(),
       createPlan: (category, dueDate) => new ExpensePlanModal(this.app, this.store, () => this.scheduleRefresh(120), undefined, { category, dueDate }).open(),
       editPlan: (plan) => new ExpensePlanModal(this.app, this.store, () => this.scheduleRefresh(120), plan).open(),
@@ -92,6 +95,7 @@ export default class OxillFinancePlugin extends Plugin {
       selectedCategories: () => this.settings.selectedCategories,
       availableCategories: () => this.getAvailableCategories(),
       hiddenPlanningCategories: () => this.settings.hiddenPlanningCategories,
+      connectedPerson: (path) => this.settings.personNetworkConnectorEnabled ? this.personNetwork.getPerson(path) : undefined,
     };
   }
 

@@ -64,8 +64,8 @@ export function createFinanceWorkbook(index: FinanceIndex, categories: string[],
   ]);
   appendSheet(book, SHEETS.plannedTransfers, plannedTransferRows, [22, 14, 20, 22, 22, 22, 22, 12, 20, 34]);
   const debtRows: unknown[][] = [excelHeaders("debts", locale)];
-  if (!template) for (const debt of index.debts) debtRows.push([debt.id, debt.personPath, debt.icon, debt.amount, debt.comment ?? "", debt.file.path]);
-  appendSheet(book, SHEETS.debts, debtRows, [22, 34, 18, 18, 30, 34]);
+  if (!template) for (const debt of index.debts) debtRows.push([debt.id, debt.name, debt.personPath ?? "", debt.icon, debt.amount, debt.comment ?? "", debt.file.path]);
+  appendSheet(book, SHEETS.debts, debtRows, [22, 26, 34, 18, 18, 30, 34]);
   appendSheet(book, SHEETS.categories, [excelHeaders("categories", locale), ...categories.map((name) => [name])], [28]);
   appendSheet(book, SHEETS.help, instructionRows(locale), [24, 92]);
   return book;
@@ -196,11 +196,13 @@ export function parseFinanceWorkbook(data: ArrayBuffer, index: FinanceIndex): Ex
   for (const [position, row] of rows(book, [SHEETS.debts, "Долги"]).entries()) {
     const line = position + 2;
     try {
-      const personPath = required(row, ["person note", "заметка человека"], "person note");
+      const personPath = text(row, ["person note", "заметка человека"]);
+      const name = text(row, ["name", "название"]) || noteName(personPath);
+      if (!name) throw new Error(t("Укажите название или заметку человека", "Provide a name or person note"));
       const amount = signedAmount(value(row, ["signed amount", "сумма со знаком", "сумма"]));
-      const id = text(row, ["finance id", "id"]) || stableId("debt", `${personPath}|${amount}`);
+      const id = text(row, ["finance id", "id"]) || stableId("debt", `${name}|${personPath}|${amount}`);
       if (existingIds.has(id)) { result.skipped++; continue; }
-      result.debts.push({ id, personPath, amount, icon: text(row, ["icon", "иконка"]) || "user-round", comment: text(row, ["comment", "комментарий"]) || undefined });
+      result.debts.push({ id, name, personPath: personPath || undefined, amount, icon: text(row, ["icon", "иконка"]) || "user-round", comment: text(row, ["comment", "комментарий"]) || undefined });
       existingIds.add(id);
     } catch (error) { result.errors.push(rowError(SHEETS.debts, line, error)); }
   }
@@ -322,6 +324,7 @@ function value(row: Row, aliases: string[]): unknown {
 function text(row: Row, aliases: string[]): string { const item = value(row, aliases); return item === null || item === undefined ? "" : String(item).trim(); }
 function required(row: Row, aliases: string[], label: string): string { const item = text(row, aliases); if (!item) throw new Error(`${label}: ${t("обязательное поле", "required field")}`); return item; }
 function normalize(input: string): string { return input.trim().toLocaleLowerCase().replace(/\s+/g, " "); }
+function noteName(path: string): string { return path.split("/").pop()?.replace(/\.md$/i, "") ?? ""; }
 function positiveAmount(input: unknown): number {
   const parsed = typeof input === "number" ? input : Number(String(input).replace(/[\s\u00a0]/g, "").replace(",", "."));
   if (!Number.isFinite(parsed) || parsed <= 0) throw new Error(t("amount должен быть положительным числом", "amount must be a positive number"));

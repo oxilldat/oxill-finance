@@ -9,6 +9,7 @@ import { renderAccuracy } from "./month-summary-modal";
 import { TransactionStore } from "./transaction-store";
 import { ExpensePlan, FinanceAccount, FinanceDebt, FinanceMonthSummary, FinanceSummary, FinanceTransaction, IncomePlan, PeriodKind, PlannedTransfer, TransactionKind } from "./types";
 import { localeCode, t } from "./i18n";
+import { ConnectedPerson } from "./person-network-connector";
 
 export const VIEW_TYPE_FINANCE = "oxill-finance-dashboard";
 type NavigationItem = "overview" | "accounts" | "debts" | "planning";
@@ -39,6 +40,7 @@ export interface FinanceViewActions {
   selectedCategories: () => string[];
   availableCategories: () => string[];
   hiddenPlanningCategories: () => string[];
+  connectedPerson: (path: string) => ConnectedPerson | undefined;
 }
 const PERIOD_SEQUENCE: PeriodKind[] = ["day", "week", "month", "quarter", "half-year", "year"];
 function periodLabel(period: PeriodKind): string {
@@ -655,11 +657,17 @@ export class FinanceView extends ItemView {
     const list = container.createDiv({ cls: "oxf-accounts-list" });
     for (const debt of debts) {
       const row = list.createDiv({ cls: "oxf-debt-row" });
-      const icon = row.createSpan({ cls: "oxf-account-icon" }); setIcon(icon, normalizeAccountIcon(debt.icon));
+      const connectedPerson = debt.personPath ? this.actions.connectedPerson(debt.personPath) : undefined;
+      if (connectedPerson) this.renderPersonAvatar(row, connectedPerson);
+      else {
+        const icon = row.createSpan({ cls: "oxf-account-icon" });
+        setIcon(icon, normalizeAccountIcon(debt.icon));
+      }
       const identity = row.createDiv({ cls: "oxf-account-identity" });
-      const person = identity.createEl("button", { cls: "oxf-debt-person", text: personName(debt.personPath), attr: { type: "button" } });
-      person.addEventListener("click", () => void this.app.workspace.openLinkText(debt.personPath, debt.file.path));
-      identity.createSpan({ text: debt.amount > 0 ? t("Должен человек", "They owe me") : t("Должен я", "I owe") });
+      if (debt.personPath) {
+        const person = identity.createEl("button", { cls: "oxf-debt-person", text: debt.name, attr: { type: "button" } });
+        person.addEventListener("click", () => void this.app.workspace.openLinkText(debt.personPath ?? "", debt.file.path));
+      } else identity.createEl("strong", { text: debt.name });
       row.createEl("strong", { cls: `oxf-debt-amount ${debt.amount > 0 ? "is-positive" : "is-negative"}`, text: `${debt.amount > 0 ? "+" : "−"}${money(Math.abs(debt.amount))} ₽` });
       const more = row.createEl("button", { cls: "oxf-account-more", attr: { type: "button", "aria-label": t("Действия с долгом", "Debt actions") } }); setIcon(more, "ellipsis");
       more.addEventListener("click", (event) => {
@@ -669,6 +677,12 @@ export class FinanceView extends ItemView {
         menu.showAtMouseEvent(event);
       });
     }
+  }
+
+  private renderPersonAvatar(container: HTMLElement, person: ConnectedPerson): void {
+    const avatar = container.createSpan({ cls: "oxf-person-avatar", attr: { "aria-label": person.name } });
+    if (person.photoUrl) avatar.createEl("img", { attr: { src: person.photoUrl, alt: person.name } });
+    else avatar.createSpan({ text: person.name.trim().charAt(0).toLocaleUpperCase() || "?" });
   }
 
   private renderPlanningMetric(container: HTMLElement, label: string, value: string): void {
@@ -828,9 +842,6 @@ function money(value: number): string { return new Intl.NumberFormat(localeCode(
 function dateLabel(date: Date): string { return new Intl.DateTimeFormat(localeCode(), { day: "2-digit", month: "short", year: "numeric" }).format(date); }
 function categoryColors(): string[] {
   return ["#7c6cf2", "#4f8fe8", "#39a58a", "#e5a83e", "#dc6f57", "#a86dd4", "#58a6b3", "#87909a"];
-}
-function personName(path: string): string {
-  return path.split("/").pop()?.replace(/\.md$/i, "") || path;
 }
 function customRangeLabel(start: Date, end: Date): string {
   const formatter = new Intl.DateTimeFormat(localeCode(), { day: "numeric", month: "short", year: "numeric" });

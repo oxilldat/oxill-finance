@@ -1,7 +1,7 @@
 import { AbstractInputSuggest, App, TFile } from "obsidian";
 
 export class MarkdownFileSuggest extends AbstractInputSuggest<TFile> {
-  constructor(app: App, inputEl: HTMLInputElement, onChoose: (path: string) => void) {
+  constructor(app: App, inputEl: HTMLInputElement, onChoose: (path: string) => void, private readonly filter?: (file: TFile) => boolean) {
     super(app, inputEl);
     this.limit = 50;
     this.onSelect((file) => {
@@ -15,6 +15,7 @@ export class MarkdownFileSuggest extends AbstractInputSuggest<TFile> {
     const search = query.trim().toLocaleLowerCase();
     return this.app.vault.getMarkdownFiles()
       .filter((file) => !isFinanceNote(this.app, file))
+      .filter((file) => this.filter?.(file) ?? true)
       .filter((file) => search.length === 0 || `${file.basename} ${file.path}`.toLocaleLowerCase().includes(search))
       .sort((left, right) => left.basename.localeCompare(right.basename));
   }

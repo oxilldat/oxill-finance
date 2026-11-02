@@ -78,7 +78,8 @@ export interface PlannedTransfer {
 
 export interface FinanceDebt {
   id: string;
-  personPath: string;
+  name: string;
+  personPath?: string;
   icon: string;
   amount: number;
   comment?: string;

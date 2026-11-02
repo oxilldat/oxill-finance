@@ -15,6 +15,7 @@ export interface OxillFinanceSettings {
   planningFolder: string;
   debtsFolder: string;
   autoRecalculateMonthSummary: boolean;
+  personNetworkConnectorEnabled: boolean;
 }
 
 export const DEFAULT_SETTINGS: OxillFinanceSettings = {
@@ -27,6 +28,7 @@ export const DEFAULT_SETTINGS: OxillFinanceSettings = {
   planningFolder: "Финансы/Планирование",
   debtsFolder: "Финансы/Долги",
   autoRecalculateMonthSummary: true,
+  personNetworkConnectorEnabled: false,
 };
 
 type FolderSettingKey = "operationsFolder" | "accountsFolder" | "planningFolder" | "debtsFolder";
@@ -40,6 +42,7 @@ export function normalizeFinanceSettings(settings: OxillFinanceSettings): OxillF
     planningFolder: normalizeFolder(settings.planningFolder, DEFAULT_SETTINGS.planningFolder),
     debtsFolder: normalizeFolder(settings.debtsFolder, DEFAULT_SETTINGS.debtsFolder),
     autoRecalculateMonthSummary: settings.autoRecalculateMonthSummary !== false,
+    personNetworkConnectorEnabled: settings.personNetworkConnectorEnabled === true,
   };
 }
 
@@ -98,6 +101,21 @@ export class FinanceSettingTab extends PluginSettingTab {
                 .setValue(this.plugin.settings.autoRecalculateMonthSummary)
                 .onChange(async (value) => {
                   this.plugin.settings.autoRecalculateMonthSummary = value;
+                  await this.plugin.saveFinanceSettings();
+                }));
+            },
+          },
+          {
+            name: t("Коннектор Person Network", "Person Network connector"),
+            desc: this.plugin.personNetwork.isAvailable()
+              ? t("Связывает долги с заметками людей и показывает их фотографии.", "Links debts to person notes and shows their photos.")
+              : t("Установите и включите Person Network, чтобы использовать заметки людей.", "Install and enable Person Network to use person notes."),
+            render: (setting) => {
+              setting.addToggle((toggle) => toggle
+                .setValue(this.plugin.settings.personNetworkConnectorEnabled)
+                .setDisabled(!this.plugin.personNetwork.isAvailable())
+                .onChange(async (value) => {
+                  this.plugin.settings.personNetworkConnectorEnabled = value;
                   await this.plugin.saveFinanceSettings();
                 }));
             },

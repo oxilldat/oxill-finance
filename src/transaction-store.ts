@@ -42,7 +42,7 @@ export interface NewIncomePlan {
   paidAt?: Date;
 }
 export interface NewPlannedTransfer { id?: string; amount: number; dueDate: Date; fromAccountId: string; toAccountId: string; status?: ExpensePlanStatus; paidAt?: Date; }
-export interface NewDebt { id?: string; personPath: string; icon: string; amount: number; comment?: string; }
+export interface NewDebt { id?: string; name: string; personPath?: string; icon: string; amount: number; comment?: string; }
 export interface NewMonthSummary {
   id?: string;
   period: string;
@@ -329,21 +329,26 @@ export class TransactionStore {
     const folder = this.getFolders().debts;
     await ensureFolder(this.app, folder);
     const id = input.id ?? `debt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-    const personName = personNameFromPath(input.personPath);
+    const name = input.personPath ? personNameFromPath(input.personPath) : input.name.trim();
     const content = [
       "---", "finance_type: debt", `finance_id: ${quote(id)}`,
-      `person: ${quote(input.personPath)}`, `icon: ${quote(normalizeAccountIcon(input.icon))}`,
+      `debt_name: ${quote(name)}`,
+      ...(input.personPath ? [`person: ${quote(input.personPath)}`] : []),
+      `icon: ${quote(normalizeAccountIcon(input.icon))}`,
       `amount: ${input.amount}`, ...(input.comment ? [`comment: ${quote(input.comment)}`] : []),
-      "---", "", `# ${t("Долг", "Debt")}: [[${input.personPath}|${personName}]]`, "",
+      "---", "", `# ${t("Долг", "Debt")}: ${input.personPath ? `[[${input.personPath}|${name}]]` : name}`, "",
     ].join("\n");
-    const path = normalizePath(`${folder}/${safeFileName(personName)}.md`);
+    const path = normalizePath(`${folder}/${safeFileName(name)}.md`);
     await this.app.vault.create(await availablePath(this.app, path), content);
     return id;
   }
 
   async updateDebt(debt: FinanceDebt, input: NewDebt): Promise<void> {
     await this.app.fileManager.processFrontMatter(debt.file, (data) => {
-      setFrontmatterValue(data, "person", input.personPath);
+      const name = input.personPath ? personNameFromPath(input.personPath) : input.name.trim();
+      setFrontmatterValue(data, "debt_name", name);
+      if (input.personPath) setFrontmatterValue(data, "person", input.personPath);
+      else deleteFrontmatterValue(data, "person");
       setFrontmatterValue(data, "icon", normalizeAccountIcon(input.icon));
       setFrontmatterValue(data, "amount", input.amount);
       if (input.comment) setFrontmatterValue(data, "comment", input.comment);
@@ -420,7 +425,7 @@ export function readFinanceIndex(app: App): FinanceIndex {
   plans.sort((left, right) => left.dueDate.getTime() - right.dueDate.getTime());
   incomePlans.sort((left, right) => left.dueDate.getTime() - right.dueDate.getTime());
   plannedTransfers.sort((left, right) => left.dueDate.getTime() - right.dueDate.getTime());
-  debts.sort((left, right) => personNameFromPath(left.personPath).localeCompare(personNameFromPath(right.personPath), "ru"));
+  debts.sort((left, right) => left.name.localeCompare(right.name, "ru"));
   monthSummaries.sort((left, right) => right.period.localeCompare(left.period));
   const accountMap = new Map(accounts.map((account) => [account.id, account]));
   for (const transaction of transactions) {
@@ -532,10 +537,13 @@ function parsePlannedTransfer(file: TFile, data: Frontmatter): PlannedTransfer {
 }
 
 function parseDebt(file: TFile, data: Frontmatter): FinanceDebt {
+  const personPath = optionalString(data.person);
+  const name = optionalString(data.debt_name) ?? (personPath ? personNameFromPath(personPath) : undefined);
+  if (!name) throw new Error(t("Укажите название долга или заметку человека", "Provide a debt name or person note"));
   const amount = Number(data.amount);
   if (!Number.isFinite(amount) || Math.abs(amount) < 0.005) throw new Error(t("amount долга должен быть ненулевым числом", "Debt amount must be a non-zero number"));
   return {
-    id: requiredString(data.finance_id, "finance_id"), personPath: requiredString(data.person, "person"),
+    id: requiredString(data.finance_id, "finance_id"), name, personPath,
     icon: normalizeAccountIcon(optionalString(data.icon)), amount, comment: optionalString(data.comment), file,
   };
 }
