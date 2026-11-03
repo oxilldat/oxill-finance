@@ -42,7 +42,7 @@ export interface NewIncomePlan {
   paidAt?: Date;
 }
 export interface NewPlannedTransfer { id?: string; amount: number; dueDate: Date; fromAccountId: string; toAccountId: string; status?: ExpensePlanStatus; paidAt?: Date; }
-export interface NewDebt { id?: string; name: string; personPath?: string; icon: string; amount: number; comment?: string; }
+export interface NewDebt { id?: string; name: string; personPath?: string; icon: string; amount: number; comment?: string; archivedAt?: Date; }
 export interface NewMonthSummary {
   id?: string;
   period: string;
@@ -336,6 +336,7 @@ export class TransactionStore {
       ...(input.personPath ? [`person: ${quote(input.personPath)}`] : []),
       `icon: ${quote(normalizeAccountIcon(input.icon))}`,
       `amount: ${input.amount}`, ...(input.comment ? [`comment: ${quote(input.comment)}`] : []),
+      ...(input.archivedAt ? [`closed_at: ${quote(input.archivedAt.toISOString())}`] : []),
       "---", "", `# ${t("Долг", "Debt")}: ${input.personPath ? `[[${input.personPath}|${name}]]` : name}`, "",
     ].join("\n");
     const path = normalizePath(`${folder}/${safeFileName(name)}.md`);
@@ -357,6 +358,13 @@ export class TransactionStore {
   }
 
   async deleteDebt(debt: FinanceDebt): Promise<void> { await this.app.fileManager.trashFile(debt.file); }
+
+  async setDebtArchived(debt: FinanceDebt, archived: boolean): Promise<void> {
+    await this.app.fileManager.processFrontMatter(debt.file, (data) => {
+      if (archived) setFrontmatterValue(data, "closed_at", new Date().toISOString());
+      else deleteFrontmatterValue(data, "closed_at");
+    });
+  }
 
   async createMonthSummary(input: NewMonthSummary): Promise<FinanceMonthSummary> {
     const folder = this.getFolders().planning;
@@ -542,9 +550,11 @@ function parseDebt(file: TFile, data: Frontmatter): FinanceDebt {
   if (!name) throw new Error(t("Укажите название долга или заметку человека", "Provide a debt name or person note"));
   const amount = Number(data.amount);
   if (!Number.isFinite(amount) || Math.abs(amount) < 0.005) throw new Error(t("amount долга должен быть ненулевым числом", "Debt amount must be a non-zero number"));
+  const archivedAtValue = optionalString(data.closed_at);
   return {
     id: requiredString(data.finance_id, "finance_id"), name, personPath,
-    icon: normalizeAccountIcon(optionalString(data.icon)), amount, comment: optionalString(data.comment), file,
+    icon: normalizeAccountIcon(optionalString(data.icon)), amount, comment: optionalString(data.comment),
+    archivedAt: archivedAtValue ? validDate(archivedAtValue) : undefined, file,
   };
 }
 

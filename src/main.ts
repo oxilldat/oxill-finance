@@ -5,7 +5,7 @@ import { FinanceView, FinanceViewActions, VIEW_TYPE_FINANCE } from "./finance-vi
 import { TransactionModal } from "./transaction-modal";
 import { FinanceStorageFolders, TransactionStore } from "./transaction-store";
 import { DeleteExpensePlanModal, ExpensePlanModal } from "./planning-modal";
-import { ExpensePlan, FinanceAccount, FinanceMonthSummary, IncomePlan, PlannedTransfer, TransactionKind } from "./types";
+import { ExpensePlan, FinanceAccount, FinanceDebt, FinanceMonthSummary, IncomePlan, PlannedTransfer, TransactionKind } from "./types";
 import { DeletePlannedTransferModal, PlannedTransferModal } from "./planned-transfer-modal";
 import { DebtModal, DeleteDebtModal } from "./debt-modal";
 import { DeleteIncomePlanModal, IncomePlanModal } from "./income-plan-modal";
@@ -78,6 +78,7 @@ export default class OxillFinancePlugin extends Plugin {
       createDebt: () => new DebtModal(this.app, this.store, this.personNetwork, this.settings.personNetworkConnectorEnabled, () => this.scheduleRefresh(120)).open(),
       editDebt: (debt) => new DebtModal(this.app, this.store, this.personNetwork, this.settings.personNetworkConnectorEnabled, () => this.scheduleRefresh(120), debt).open(),
       deleteDebt: (debt) => new DeleteDebtModal(this.app, this.store, debt, () => this.scheduleRefresh(120)).open(),
+      setDebtArchived: (debt, archived) => void this.setDebtArchived(debt, archived),
       createPlan: (category, dueDate) => new ExpensePlanModal(this.app, this.store, () => this.scheduleRefresh(120), undefined, { category, dueDate }).open(),
       editPlan: (plan) => new ExpensePlanModal(this.app, this.store, () => this.scheduleRefresh(120), plan).open(),
       deletePlan: (plan) => new DeleteExpensePlanModal(this.app, this.store, plan, () => this.scheduleRefresh(120)).open(),
@@ -142,6 +143,16 @@ export default class OxillFinancePlugin extends Plugin {
         : t("Доход отмечен полученным", "Income marked as received"));
     } catch (error) {
       new Notice(error instanceof Error ? error.message : t("Не удалось выполнить план", "Could not complete the plan"));
+    }
+  }
+
+  private async setDebtArchived(debt: FinanceDebt, archived: boolean): Promise<void> {
+    try {
+      await this.store.setDebtArchived(debt, archived);
+      this.scheduleRefresh(120);
+      new Notice(archived ? t("Долг перенесён в архив", "Debt moved to archive") : t("Долг возвращён в активные", "Debt restored to active"));
+    } catch (error) {
+      new Notice(error instanceof Error ? error.message : t("Не удалось обновить долг", "Could not update the debt"));
     }
   }
 

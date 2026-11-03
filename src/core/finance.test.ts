@@ -7,7 +7,7 @@ import { FinanceTransaction } from "../types";
 import { setFinanceLocale } from "../i18n";
 import { excelHeaders } from "./excel-schema";
 import { normalizeAccountIcon } from "./account-icons";
-import { summarizeDebts } from "./debts";
+import { splitDebtsByArchive, summarizeDebts } from "./debts";
 import { calculateMonthlyPlanningBudget, calculatePlanningForecast } from "./planning";
 import type { ExpensePlan, IncomePlan, PlannedTransfer } from "../types";
 import { createMonthSummarySnapshot, expenseDeviationPercent } from "./month-summary";
@@ -27,6 +27,12 @@ test("разделяет долги по знаку суммы", () => {
     owedToMe: 502_000,
     iOwe: 50_000,
   });
+});
+
+test("разделяет активные и архивные долги", () => {
+  const active = { amount: 5_000, archivedAt: undefined };
+  const archived = { amount: -3_000, archivedAt: new Date("2026-11-03T12:00:00Z") };
+  assert.deepEqual(splitDebtsByArchive([active, archived]), { active: [active], archived: [archived] });
 });
 
 test("рассчитывает прогноз с плановыми доходами и расходами", () => {

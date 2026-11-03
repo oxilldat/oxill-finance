@@ -64,8 +64,8 @@ export function createFinanceWorkbook(index: FinanceIndex, categories: string[],
   ]);
   appendSheet(book, SHEETS.plannedTransfers, plannedTransferRows, [22, 14, 20, 22, 22, 22, 22, 12, 20, 34]);
   const debtRows: unknown[][] = [excelHeaders("debts", locale)];
-  if (!template) for (const debt of index.debts) debtRows.push([debt.id, debt.name, debt.personPath ?? "", debt.icon, debt.amount, debt.comment ?? "", debt.file.path]);
-  appendSheet(book, SHEETS.debts, debtRows, [22, 26, 34, 18, 18, 30, 34]);
+  if (!template) for (const debt of index.debts) debtRows.push([debt.id, debt.name, debt.personPath ?? "", debt.icon, debt.amount, debt.comment ?? "", debt.archivedAt ?? "", debt.file.path]);
+  appendSheet(book, SHEETS.debts, debtRows, [22, 26, 34, 18, 18, 30, 22, 34]);
   appendSheet(book, SHEETS.categories, [excelHeaders("categories", locale), ...categories.map((name) => [name])], [28]);
   appendSheet(book, SHEETS.help, instructionRows(locale), [24, 92]);
   return book;
@@ -202,7 +202,13 @@ export function parseFinanceWorkbook(data: ArrayBuffer, index: FinanceIndex): Ex
       const amount = signedAmount(value(row, ["signed amount", "сумма со знаком", "сумма"]));
       const id = text(row, ["finance id", "id"]) || stableId("debt", `${name}|${personPath}|${amount}`);
       if (existingIds.has(id)) { result.skipped++; continue; }
-      result.debts.push({ id, name, personPath: personPath || undefined, amount, icon: text(row, ["icon", "иконка"]) || "user-round", comment: text(row, ["comment", "комментарий"]) || undefined });
+      const archivedAtValue = value(row, ["closed at", "closed_at", "дата закрытия"]);
+      result.debts.push({
+        id, name, personPath: personPath || undefined, amount,
+        icon: text(row, ["icon", "иконка"]) || "user-round",
+        comment: text(row, ["comment", "комментарий"]) || undefined,
+        archivedAt: archivedAtValue === "" ? undefined : parseDate(archivedAtValue),
+      });
       existingIds.add(id);
     } catch (error) { result.errors.push(rowError(SHEETS.debts, line, error)); }
   }

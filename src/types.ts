@@ -83,6 +83,7 @@ export interface FinanceDebt {
   icon: string;
   amount: number;
   comment?: string;
+  archivedAt?: Date;
   file: TFile;
 }
 

@@ -2,7 +2,7 @@ import { ItemView, Menu, setIcon, WorkspaceLeaf } from "obsidian";
 
 import { calculateSummary, selectCategorySlices } from "./core/finance";
 import { normalizeAccountIcon } from "./core/account-icons";
-import { summarizeDebts } from "./core/debts";
+import { splitDebtsByArchive, summarizeDebts } from "./core/debts";
 import { calculateMonthlyPlanningBudget } from "./core/planning";
 import { monthPeriod } from "./core/month-summary";
 import { renderAccuracy } from "./month-summary-modal";
@@ -23,6 +23,7 @@ export interface FinanceViewActions {
   createDebt: () => void;
   editDebt: (debt: FinanceDebt) => void;
   deleteDebt: (debt: FinanceDebt) => void;
+  setDebtArchived: (debt: FinanceDebt, archived: boolean) => void;
   createPlan: (category?: string, dueDate?: Date) => void;
   editPlan: (plan: ExpensePlan) => void;
   deletePlan: (plan: ExpensePlan) => void;
@@ -64,6 +65,7 @@ export class FinanceView extends ItemView {
   private planningPanel: "expenses" | "timeline" = "expenses";
   private draggedAccountId?: string;
   private activeSection: NavigationItem = "overview";
+  private debtArchiveOpen = false;
   private unsubscribe?: () => void;
   private resizeObserver?: ResizeObserver;
   private planningCompact = false;
@@ -638,20 +640,37 @@ export class FinanceView extends ItemView {
   }
 
   private renderDebts(container: HTMLElement): void {
-    const debts = this.store.getIndex().debts;
+    const split = splitDebtsByArchive(this.store.getIndex().debts);
+    const debts = this.debtArchiveOpen ? split.archived : split.active;
     const { owedToMe, iOwe } = summarizeDebts(debts);
     const heading = container.createDiv({ cls: "oxf-accounts-heading" });
     const title = heading.createDiv();
     title.createEl("h2", { text: t("Долги", "Debts") });
-    title.createEl("p", { text: t("Личные долги, связанные с заметками людей", "Personal debts linked to person notes") });
-    heading.createEl("button", { cls: "mod-cta", text: t("+ Добавить долг", "+ Add debt"), attr: { type: "button" } }).addEventListener("click", () => this.actions.createDebt());
+    title.createEl("p", { text: this.debtArchiveOpen
+      ? t("Закрытые долги", "Closed debts")
+      : t("Личные долги и обязательства", "Personal debts and obligations") });
+    const headingActions = heading.createDiv({ cls: "oxf-debt-heading-actions" });
+    const archive = headingActions.createEl("button", {
+      cls: `oxf-debt-archive-toggle${this.debtArchiveOpen ? " is-active" : ""}`,
+      attr: {
+        type: "button",
+        "aria-label": this.debtArchiveOpen ? t("Вернуться к активным долгам", "Return to active debts") : t("Архив долгов", "Debt archive"),
+        title: this.debtArchiveOpen ? t("Активные долги", "Active debts") : t("Архив долгов", "Debt archive"),
+        "aria-pressed": String(this.debtArchiveOpen),
+      },
+    });
+    setIcon(archive, this.debtArchiveOpen ? "archive-restore" : "archive");
+    archive.addEventListener("click", () => { this.debtArchiveOpen = !this.debtArchiveOpen; this.render(); });
+    headingActions.createEl("button", { cls: "mod-cta", text: t("+ Добавить долг", "+ Add debt"), attr: { type: "button" } }).addEventListener("click", () => this.actions.createDebt());
     const summary = container.createDiv({ cls: "oxf-debt-summary" });
-    this.renderPlanningMetric(summary, t("Мне должны", "Owed to me"), `+${money(owedToMe)} ₽`);
-    this.renderPlanningMetric(summary, t("Я должен", "I owe"), `−${money(iOwe)} ₽`);
+    this.renderPlanningMetric(summary, this.debtArchiveOpen ? t("Вернули мне", "Repaid to me") : t("Мне должны", "Owed to me"), `+${money(owedToMe)} ₽`);
+    this.renderPlanningMetric(summary, this.debtArchiveOpen ? t("Вернул я", "Repaid by me") : t("Я должен", "I owe"), `−${money(iOwe)} ₽`);
     if (debts.length === 0) {
       const empty = container.createDiv({ cls: "oxf-card oxf-accounts-empty" });
-      empty.createEl("strong", { text: t("Долгов пока нет", "No debts yet") });
-      empty.createEl("p", { text: t("Добавьте запись и свяжите её с заметкой человека.", "Add an entry and link it to a person note.") });
+      empty.createEl("strong", { text: this.debtArchiveOpen ? t("Архив долгов пуст", "Debt archive is empty") : t("Долгов пока нет", "No debts yet") });
+      empty.createEl("p", { text: this.debtArchiveOpen
+        ? t("Закрытые долги появятся здесь.", "Closed debts will appear here.")
+        : t("Добавьте долг по названию или свяжите его с заметкой человека.", "Add a debt by name or link it to a person note.") });
       return;
     }
     const list = container.createDiv({ cls: "oxf-accounts-list" });
@@ -672,6 +691,10 @@ export class FinanceView extends ItemView {
       const more = row.createEl("button", { cls: "oxf-account-more", attr: { type: "button", "aria-label": t("Действия с долгом", "Debt actions") } }); setIcon(more, "ellipsis");
       more.addEventListener("click", (event) => {
         const menu = new Menu();
+        menu.addItem((item) => item
+          .setTitle(this.debtArchiveOpen ? t("Вернуть в активные", "Restore to active") : t("Закрыть долг", "Close debt"))
+          .setIcon(this.debtArchiveOpen ? "archive-restore" : "circle-check")
+          .onClick(() => this.actions.setDebtArchived(debt, !this.debtArchiveOpen)));
         menu.addItem((item) => item.setTitle(t("Изменить", "Edit")).setIcon("pencil").onClick(() => this.actions.editDebt(debt)));
         menu.addItem((item) => item.setTitle(t("Удалить", "Delete")).setIcon("trash-2").onClick(() => this.actions.deleteDebt(debt)));
         menu.showAtMouseEvent(event);
