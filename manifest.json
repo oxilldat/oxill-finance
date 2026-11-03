@@ -1,7 +1,7 @@
 {
   "id": "oxill-finance",
   "name": "Oxill Finance",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "minAppVersion": "1.13.0",
   "description": "Track expenses, income, accounts, transfers, debts, and future plans using local Markdown notes.",
   "author": "Oxill",
