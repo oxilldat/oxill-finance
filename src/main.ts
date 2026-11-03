@@ -1,7 +1,7 @@
 import { Notice, Plugin, WorkspaceLeaf } from "obsidian";
 
 import { AccountModal, DeleteAccountModal, TransferModal } from "./account-modals";
-import { FinanceView, FinanceViewActions, VIEW_TYPE_FINANCE } from "./finance-view";
+import { DebtPlanDirection, FinanceView, FinanceViewActions, VIEW_TYPE_FINANCE } from "./finance-view";
 import { TransactionModal } from "./transaction-modal";
 import { FinanceStorageFolders, TransactionStore } from "./transaction-store";
 import { DeleteExpensePlanModal, ExpensePlanModal } from "./planning-modal";
@@ -80,7 +80,7 @@ export default class OxillFinancePlugin extends Plugin {
       editDebt: (debt) => new DebtModal(this.app, this.store, this.personNetwork, this.settings.personNetworkConnectorEnabled, () => this.scheduleRefresh(120), debt).open(),
       deleteDebt: (debt) => new DeleteDebtModal(this.app, this.store, debt, () => this.scheduleRefresh(120)).open(),
       setDebtArchived: (debt, archived) => void this.setDebtArchived(debt, archived),
-      planDebtPayment: (debt) => new DebtPlanModal(this.app, this.store, debt, () => this.scheduleRefresh(120)).open(),
+      planDebtPayment: (direction) => this.openDebtPlanModal(direction),
       createPlan: (category, dueDate) => new ExpensePlanModal(this.app, this.store, () => this.scheduleRefresh(120), undefined, { category, dueDate }).open(),
       editPlan: (plan) => new ExpensePlanModal(this.app, this.store, () => this.scheduleRefresh(120), plan).open(),
       deletePlan: (plan) => new DeleteExpensePlanModal(this.app, this.store, plan, () => this.scheduleRefresh(120)).open(),
@@ -156,6 +156,15 @@ export default class OxillFinancePlugin extends Plugin {
     } catch (error) {
       new Notice(error instanceof Error ? error.message : t("Не удалось обновить долг", "Could not update the debt"));
     }
+  }
+
+  private openDebtPlanModal(direction: DebtPlanDirection): void {
+    const available = this.store.getIndex().debts.some((debt) => !debt.archivedAt && (direction === "pay" ? debt.amount < 0 : debt.amount > 0));
+    if (!available) {
+      new Notice(direction === "pay" ? t("Нет активных долгов к погашению", "No active debts to repay") : t("Нет активных долгов к получению", "No active debts to collect"));
+      return;
+    }
+    new DebtPlanModal(this.app, this.store, direction, () => this.scheduleRefresh(120)).open();
   }
 
   private async ensureMonthSummary(year: number, month: number): Promise<void> {

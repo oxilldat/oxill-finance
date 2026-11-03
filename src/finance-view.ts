@@ -13,6 +13,7 @@ import { ConnectedPerson } from "./person-network-connector";
 
 export const VIEW_TYPE_FINANCE = "oxill-finance-dashboard";
 type NavigationItem = "overview" | "accounts" | "debts" | "planning";
+export type DebtPlanDirection = "pay" | "receive";
 export interface FinanceViewActions {
   openTransaction: (kind: TransactionKind, accountId?: string) => void;
   createAccount: () => void;
@@ -24,7 +25,7 @@ export interface FinanceViewActions {
   editDebt: (debt: FinanceDebt) => void;
   deleteDebt: (debt: FinanceDebt) => void;
   setDebtArchived: (debt: FinanceDebt, archived: boolean) => void;
-  planDebtPayment: (debt: FinanceDebt) => void;
+  planDebtPayment: (direction: DebtPlanDirection) => void;
   createPlan: (category?: string, dueDate?: Date) => void;
   editPlan: (plan: ExpensePlan) => void;
   deletePlan: (plan: ExpensePlan) => void;
@@ -637,6 +638,9 @@ export class FinanceView extends ItemView {
     menu.addItem((item) => item.setTitle(t("Запланировать расход", "Plan expense")).setIcon("receipt-text").onClick(() => this.actions.createPlan()));
     menu.addItem((item) => item.setTitle(t("Запланировать доход", "Plan income")).setIcon("circle-plus").onClick(() => this.actions.createIncomePlan()));
     menu.addItem((item) => item.setTitle(t("Запланировать перевод", "Plan transfer")).setIcon("arrow-left-right").onClick(() => this.actions.createPlannedTransfer()));
+    menu.addSeparator();
+    menu.addItem((item) => item.setTitle(t("Погашение долга", "Debt repayment")).setIcon("circle-minus").onClick(() => this.actions.planDebtPayment("pay")));
+    menu.addItem((item) => item.setTitle(t("Получение долга", "Debt collection")).setIcon("circle-plus").onClick(() => this.actions.planDebtPayment("receive")));
     menu.showAtMouseEvent(event);
   }
 
@@ -692,10 +696,6 @@ export class FinanceView extends ItemView {
       const more = row.createEl("button", { cls: "oxf-account-more", attr: { type: "button", "aria-label": t("Действия с долгом", "Debt actions") } }); setIcon(more, "ellipsis");
       more.addEventListener("click", (event) => {
         const menu = new Menu();
-        if (!this.debtArchiveOpen) menu.addItem((item) => item
-          .setTitle(t("Запланировать погашение", "Plan repayment"))
-          .setIcon("calendar-plus")
-          .onClick(() => this.actions.planDebtPayment(debt)));
         menu.addItem((item) => item
           .setTitle(this.debtArchiveOpen ? t("Вернуть в активные", "Restore to active") : t("Закрыть долг", "Close debt"))
           .setIcon(this.debtArchiveOpen ? "archive-restore" : "circle-check")

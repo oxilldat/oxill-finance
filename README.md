@@ -174,7 +174,7 @@ closed_at: "2026-11-03T12:00:00.000Z"
 A positive debt amount means the person owes you. A negative amount means you owe the person.
 When the Person Network connector is enabled, the debt editor can replace the plain name and icon with a Person Network note and its photo. The `person` field is optional for ordinary debts.
 Closing a debt adds `closed_at` and moves it out of the active list. The archive button on the Debts page switches between active and closed debts; restoring a debt removes `closed_at`.
-Use **Plan repayment** from a debt menu to create a linked income or expense plan. Linked plans store `debt_id`. Partial completion updates the outstanding amount; full completion adds `closed_at` automatically.
+Use **Plan → Debt repayment** or **Plan → Debt collection** from the Planning page to create a linked expense or income plan. Select an active debt in the form. Linked plans store `debt_id`; partial completion updates the outstanding amount and full completion adds `closed_at` automatically.
 
 ### Categories
 

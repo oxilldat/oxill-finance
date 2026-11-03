@@ -4,7 +4,10 @@ import { t } from "./i18n";
 import { TransactionStore } from "./transaction-store";
 import { FinanceDebt } from "./types";
 
+export type DebtPlanDirection = "pay" | "receive";
+
 export class DebtPlanModal extends Modal {
+  private debtId: string;
   private amount: string;
   private dueDate = localDateValue(new Date());
   private accountId = "";
@@ -12,21 +15,40 @@ export class DebtPlanModal extends Modal {
   constructor(
     app: App,
     private readonly store: TransactionStore,
-    private readonly debt: FinanceDebt,
+    private readonly direction: DebtPlanDirection,
     private readonly afterSave: () => void,
   ) {
     super(app);
-    this.amount = String(Math.abs(debt.amount));
+    const debt = this.availableDebts()[0];
+    this.debtId = debt?.id ?? "";
+    this.amount = debt ? String(Math.abs(debt.amount)) : "";
   }
 
   onOpen(): void {
     this.modalEl.addClass("oxf-planning-modal");
-    this.contentEl.createEl("h2", { text: t("Запланировать погашение", "Plan repayment") });
-    new Setting(this.contentEl).setName(t("Долг", "Debt")).setDesc(this.debt.name);
+    this.renderForm();
+  }
+
+  onClose(): void { this.contentEl.empty(); }
+
+  private renderForm(): void {
+    this.contentEl.empty();
+    this.contentEl.createEl("h2", { text: this.direction === "pay" ? t("Запланировать погашение долга", "Plan debt repayment") : t("Запланировать получение долга", "Plan debt collection") });
+    const debts = this.availableDebts();
+    new Setting(this.contentEl).setName(t("Долг", "Debt")).addDropdown((dropdown) => {
+      for (const debt of debts) dropdown.addOption(debt.id, debt.name);
+      dropdown.setValue(this.debtId).onChange((value) => {
+        this.debtId = value;
+        const debt = debts.find((item) => item.id === value);
+        this.amount = debt ? String(Math.abs(debt.amount)) : "";
+        this.renderForm();
+      });
+    });
+    const debt = debts.find((item) => item.id === this.debtId);
     new Setting(this.contentEl).setName(t("Сумма", "Amount")).addText((text) => {
       text.inputEl.type = "number";
       text.inputEl.min = "0.01";
-      text.inputEl.max = String(Math.abs(this.debt.amount));
+      if (debt) text.inputEl.max = String(Math.abs(debt.amount));
       text.inputEl.step = "0.01";
       text.setValue(this.amount).onChange((value) => { this.amount = value; });
     });
@@ -36,7 +58,7 @@ export class DebtPlanModal extends Modal {
     });
     const accounts = this.store.getIndex().accounts;
     new Setting(this.contentEl)
-      .setName(this.debt.amount < 0 ? t("Счёт списания", "Source account") : t("Счёт зачисления", "Destination account"))
+      .setName(this.direction === "pay" ? t("Счёт списания", "Source account") : t("Счёт зачисления", "Destination account"))
       .addDropdown((dropdown) => {
         dropdown.addOption("", t("Без счёта", "No account"));
         for (const account of accounts) dropdown.addOption(account.id, account.name);
@@ -47,29 +69,27 @@ export class DebtPlanModal extends Modal {
     actions.createEl("button", { cls: "mod-cta", text: t("Запланировать", "Plan") }).addEventListener("click", () => void this.save());
   }
 
-  onClose(): void { this.contentEl.empty(); }
-
   private async save(): Promise<void> {
+    const debt = this.availableDebts().find((item) => item.id === this.debtId);
+    if (!debt) return void new Notice(t("Выберите активный долг", "Select an active debt"));
     const amount = Number(this.amount.replace(",", "."));
     const dueDate = new Date(`${this.dueDate}T12:00:00`);
     if (!Number.isFinite(amount) || amount <= 0) return void new Notice(t("Введите сумму больше нуля", "Enter an amount greater than zero"));
-    if (amount - Math.abs(this.debt.amount) > 0.005) return void new Notice(t("Сумма превышает остаток долга", "Amount exceeds the remaining debt"));
+    if (amount - Math.abs(debt.amount) > 0.005) return void new Notice(t("Сумма превышает остаток долга", "Amount exceeds the remaining debt"));
     if (Number.isNaN(dueDate.getTime())) return void new Notice(t("Введите корректную дату", "Enter a valid date"));
-    const common = {
-      amount, dueDate, category: t("Долги", "Debts"), accountId: this.accountId || undefined, debtId: this.debt.id,
-    };
-    if (this.debt.amount < 0) {
-      await this.store.createExpensePlan({
-        ...common, title: t(`Погашение долга: ${this.debt.name}`, `Debt repayment: ${this.debt.name}`), completion: "create-expense",
-      });
+    const common = { amount, dueDate, category: t("Долги", "Debts"), accountId: this.accountId || undefined, debtId: debt.id };
+    if (this.direction === "pay") {
+      await this.store.createExpensePlan({ ...common, title: t(`Погашение долга: ${debt.name}`, `Debt repayment: ${debt.name}`), completion: "create-expense" });
     } else {
-      await this.store.createIncomePlan({
-        ...common, title: t(`Возврат долга: ${this.debt.name}`, `Debt repayment: ${this.debt.name}`), completion: "create-income",
-      });
+      await this.store.createIncomePlan({ ...common, title: t(`Получение долга: ${debt.name}`, `Debt collection: ${debt.name}`), completion: "create-income" });
     }
     this.afterSave();
-    new Notice(t("Погашение добавлено в планирование", "Repayment added to planning"));
+    new Notice(t("Операция добавлена в планирование", "Entry added to planning"));
     this.close();
+  }
+
+  private availableDebts(): FinanceDebt[] {
+    return this.store.getIndex().debts.filter((debt) => !debt.archivedAt && (this.direction === "pay" ? debt.amount < 0 : debt.amount > 0));
   }
 }
 
