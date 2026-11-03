@@ -7,7 +7,7 @@ import { FinanceTransaction } from "../types";
 import { setFinanceLocale } from "../i18n";
 import { excelHeaders } from "./excel-schema";
 import { normalizeAccountIcon } from "./account-icons";
-import { splitDebtsByArchive, summarizeDebts } from "./debts";
+import { calculateDebtPayment, splitDebtsByArchive, summarizeDebts } from "./debts";
 import { calculateMonthlyPlanningBudget, calculatePlanningForecast } from "./planning";
 import type { ExpensePlan, IncomePlan, PlannedTransfer } from "../types";
 import { createMonthSummarySnapshot, expenseDeviationPercent } from "./month-summary";
@@ -33,6 +33,19 @@ test("разделяет активные и архивные долги", () =>
   const active = { amount: 5_000, archivedAt: undefined };
   const archived = { amount: -3_000, archivedAt: new Date("2026-11-03T12:00:00Z") };
   assert.deepEqual(splitDebtsByArchive([active, archived]), { active: [active], archived: [archived] });
+});
+
+test("уменьшает долг частичным платежом и закрывает полным", () => {
+  assert.deepEqual(calculateDebtPayment(-13_000, 0, 3_000), {
+    remainingAmount: -10_000,
+    repaidAmount: 3_000,
+    closedAmount: undefined,
+  });
+  assert.deepEqual(calculateDebtPayment(-10_000, 3_000, 10_000), {
+    remainingAmount: -0,
+    repaidAmount: 13_000,
+    closedAmount: -13_000,
+  });
 });
 
 test("рассчитывает прогноз с плановыми доходами и расходами", () => {

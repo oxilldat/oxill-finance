@@ -24,3 +24,22 @@ export function summarizeDebts(debts: readonly { amount: number }[]): DebtSummar
   }
   return { owedToMe, iOwe };
 }
+
+export interface DebtPaymentResult {
+  remainingAmount: number;
+  repaidAmount: number;
+  closedAmount?: number;
+}
+
+export function calculateDebtPayment(amount: number, repaidAmount: number, payment: number): DebtPaymentResult {
+  const sign = amount > 0 ? 1 : -1;
+  const current = Math.abs(amount);
+  const applied = Math.min(payment, current);
+  const remaining = Math.max(0, current - applied);
+  const totalRepaid = repaidAmount + applied;
+  return {
+    remainingAmount: sign * remaining,
+    repaidAmount: totalRepaid,
+    closedAmount: remaining <= 0.005 ? sign * totalRepaid : undefined,
+  };
+}

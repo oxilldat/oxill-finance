@@ -10,14 +10,14 @@ const ENGLISH_HEADERS: Record<ExcelSheetKind, string[]> = {
   accounts: ["Finance ID", "Name", "Icon", "Order", "Balance", "Note path"],
   planning: [
     "Finance ID", "Title", "Amount", "Due date", "Category", "Account ID", "Account",
-    "Completion action", "Status", "Paid at", "Note path",
+    "Completion action", "Status", "Paid at", "Debt ID", "Note path",
   ],
   incomePlanning: [
     "Finance ID", "Title", "Amount", "Expected date", "Category", "Account ID", "Account",
-    "Completion action", "Status", "Received at", "Note path",
+    "Completion action", "Status", "Received at", "Debt ID", "Note path",
   ],
   plannedTransfers: ["Finance ID", "Amount", "Due date", "From account ID", "From account", "To account ID", "To account", "Status", "Paid at", "Note path"],
-  debts: ["Finance ID", "Name", "Person note", "Icon", "Signed amount", "Comment", "Closed at", "Note path"],
+  debts: ["Finance ID", "Name", "Person note", "Icon", "Signed amount", "Repaid amount", "Comment", "Closed at", "Note path"],
   categories: ["Name"],
   instructions: ["Field", "Description"],
 };
@@ -31,14 +31,14 @@ const RUSSIAN_HEADERS: Record<ExcelSheetKind, string[]> = {
   accounts: ["ID", "Название", "Иконка", "Порядок", "Баланс", "Путь к заметке"],
   planning: [
     "ID", "Название", "Сумма", "Срок", "Категория", "ID счёта", "Счёт",
-    "Действие при выполнении", "Статус", "Дата оплаты", "Путь к заметке",
+    "Действие при выполнении", "Статус", "Дата оплаты", "ID долга", "Путь к заметке",
   ],
   incomePlanning: [
     "ID", "Название", "Сумма", "Ожидаемая дата", "Категория", "ID счёта", "Счёт",
-    "Действие при получении", "Статус", "Дата получения", "Путь к заметке",
+    "Действие при получении", "Статус", "Дата получения", "ID долга", "Путь к заметке",
   ],
   plannedTransfers: ["ID", "Сумма", "Срок", "ID счёта списания", "Счёт списания", "ID счёта зачисления", "Счёт зачисления", "Статус", "Дата выполнения", "Путь к заметке"],
-  debts: ["ID", "Название", "Заметка человека", "Иконка", "Сумма со знаком", "Комментарий", "Дата закрытия", "Путь к заметке"],
+  debts: ["ID", "Название", "Заметка человека", "Иконка", "Сумма со знаком", "Погашено", "Комментарий", "Дата закрытия", "Путь к заметке"],
   categories: ["Название"],
   instructions: ["Поле", "Описание"],
 };

@@ -24,6 +24,7 @@ export interface FinanceViewActions {
   editDebt: (debt: FinanceDebt) => void;
   deleteDebt: (debt: FinanceDebt) => void;
   setDebtArchived: (debt: FinanceDebt, archived: boolean) => void;
+  planDebtPayment: (debt: FinanceDebt) => void;
   createPlan: (category?: string, dueDate?: Date) => void;
   editPlan: (plan: ExpensePlan) => void;
   deletePlan: (plan: ExpensePlan) => void;
@@ -691,6 +692,10 @@ export class FinanceView extends ItemView {
       const more = row.createEl("button", { cls: "oxf-account-more", attr: { type: "button", "aria-label": t("Действия с долгом", "Debt actions") } }); setIcon(more, "ellipsis");
       more.addEventListener("click", (event) => {
         const menu = new Menu();
+        if (!this.debtArchiveOpen) menu.addItem((item) => item
+          .setTitle(t("Запланировать погашение", "Plan repayment"))
+          .setIcon("calendar-plus")
+          .onClick(() => this.actions.planDebtPayment(debt)));
         menu.addItem((item) => item
           .setTitle(this.debtArchiveOpen ? t("Вернуть в активные", "Restore to active") : t("Закрыть долг", "Close debt"))
           .setIcon(this.debtArchiveOpen ? "archive-restore" : "circle-check")

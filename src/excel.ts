@@ -48,15 +48,15 @@ export function createFinanceWorkbook(index: FinanceIndex, categories: string[],
   const planRows: unknown[][] = [excelHeaders("planning", locale)];
   if (!template) for (const plan of index.plans) planRows.push([
     plan.id, plan.title, plan.amount, plan.dueDate, plan.category, plan.accountId ?? "",
-    plan.accountId ? accountNames.get(plan.accountId) ?? "" : "", plan.completion, plan.status, plan.paidAt ?? "", plan.file.path,
+    plan.accountId ? accountNames.get(plan.accountId) ?? "" : "", plan.completion, plan.status, plan.paidAt ?? "", plan.debtId ?? "", plan.file.path,
   ]);
-  appendSheet(book, SHEETS.planning, planRows, [22, 28, 14, 20, 20, 20, 20, 20, 12, 20, 34]);
+  appendSheet(book, SHEETS.planning, planRows, [22, 28, 14, 20, 20, 20, 20, 20, 12, 20, 22, 34]);
   const incomePlanRows: unknown[][] = [excelHeaders("incomePlanning", locale)];
   if (!template) for (const plan of index.incomePlans) incomePlanRows.push([
     plan.id, plan.title, plan.amount, plan.dueDate, plan.category, plan.accountId ?? "",
-    plan.accountId ? accountNames.get(plan.accountId) ?? "" : "", plan.completion, plan.status, plan.paidAt ?? "", plan.file.path,
+    plan.accountId ? accountNames.get(plan.accountId) ?? "" : "", plan.completion, plan.status, plan.paidAt ?? "", plan.debtId ?? "", plan.file.path,
   ]);
-  appendSheet(book, SHEETS.incomePlanning, incomePlanRows, [22, 28, 14, 20, 20, 20, 20, 20, 12, 20, 34]);
+  appendSheet(book, SHEETS.incomePlanning, incomePlanRows, [22, 28, 14, 20, 20, 20, 20, 20, 12, 20, 22, 34]);
   const plannedTransferRows: unknown[][] = [excelHeaders("plannedTransfers", locale)];
   if (!template) for (const plan of index.plannedTransfers) plannedTransferRows.push([
     plan.id, plan.amount, plan.dueDate, plan.fromAccountId, accountNames.get(plan.fromAccountId) ?? "",
@@ -64,8 +64,8 @@ export function createFinanceWorkbook(index: FinanceIndex, categories: string[],
   ]);
   appendSheet(book, SHEETS.plannedTransfers, plannedTransferRows, [22, 14, 20, 22, 22, 22, 22, 12, 20, 34]);
   const debtRows: unknown[][] = [excelHeaders("debts", locale)];
-  if (!template) for (const debt of index.debts) debtRows.push([debt.id, debt.name, debt.personPath ?? "", debt.icon, debt.amount, debt.comment ?? "", debt.archivedAt ?? "", debt.file.path]);
-  appendSheet(book, SHEETS.debts, debtRows, [22, 26, 34, 18, 18, 30, 22, 34]);
+  if (!template) for (const debt of index.debts) debtRows.push([debt.id, debt.name, debt.personPath ?? "", debt.icon, debt.amount, debt.repaidAmount ?? "", debt.comment ?? "", debt.archivedAt ?? "", debt.file.path]);
+  appendSheet(book, SHEETS.debts, debtRows, [22, 26, 34, 18, 18, 18, 30, 22, 34]);
   appendSheet(book, SHEETS.categories, [excelHeaders("categories", locale), ...categories.map((name) => [name])], [28]);
   appendSheet(book, SHEETS.help, instructionRows(locale), [24, 92]);
   return book;
@@ -150,6 +150,7 @@ export function parseFinanceWorkbook(data: ArrayBuffer, index: FinanceIndex): Ex
         completion: completionText === "create-expense" || completionText === "создать расход" ? "create-expense" : "mark-only",
         status: statusText === "paid" || statusText === "оплачен" ? "paid" : "planned",
         paidAt: value(row, ["paid_at", "paid at", "дата оплаты"]) ? parseDate(value(row, ["paid_at", "paid at", "дата оплаты"])) : undefined,
+        debtId: text(row, ["debt_id", "debt id", "id долга"]) || undefined,
       });
       existingIds.add(id);
       if (!result.categories.includes(category)) result.categories.push(category);
@@ -175,6 +176,7 @@ export function parseFinanceWorkbook(data: ArrayBuffer, index: FinanceIndex): Ex
         completion: completion === "create-income" || completion === "создать доход" ? "create-income" : "mark-only",
         status: status === "paid" || status === "received" || status === "получен" ? "paid" : "planned",
         paidAt: value(row, ["received at", "дата получения"]) ? parseDate(value(row, ["received at", "дата получения"])) : undefined,
+        debtId: text(row, ["debt id", "id долга"]) || undefined,
       });
       existingIds.add(id);
     } catch (error) { result.errors.push(rowError(SHEETS.incomePlanning, line, error)); }
@@ -203,11 +205,15 @@ export function parseFinanceWorkbook(data: ArrayBuffer, index: FinanceIndex): Ex
       const id = text(row, ["finance id", "id"]) || stableId("debt", `${name}|${personPath}|${amount}`);
       if (existingIds.has(id)) { result.skipped++; continue; }
       const archivedAtValue = value(row, ["closed at", "closed_at", "дата закрытия"]);
+      const repaidAmountValue = value(row, ["repaid amount", "repaid_amount", "погашено"]);
+      const repaidAmount = repaidAmountValue === "" ? undefined : Number(repaidAmountValue);
+      if (repaidAmount !== undefined && (!Number.isFinite(repaidAmount) || repaidAmount < 0)) throw new Error(t("Погашенная сумма должна быть неотрицательным числом", "Repaid amount must be a non-negative number"));
       result.debts.push({
         id, name, personPath: personPath || undefined, amount,
         icon: text(row, ["icon", "иконка"]) || "user-round",
         comment: text(row, ["comment", "комментарий"]) || undefined,
         archivedAt: archivedAtValue === "" ? undefined : parseDate(archivedAtValue),
+        repaidAmount,
       });
       existingIds.add(id);
     } catch (error) { result.errors.push(rowError(SHEETS.debts, line, error)); }

@@ -13,6 +13,7 @@ Local-first personal finance planning for Obsidian. Oxill Finance turns Markdown
 - Provides yearly expense planning with a category-by-month heatmap.
 - Plans future income and account-to-account transfers, and turns completed plans into ordinary operations.
 - Tracks personal debts by name or, through the optional Person Network connector, by a linked person note and photo; closed debts remain available in a reversible archive.
+- Turns a debt into a linked planned income or expense; completing the plan reduces the remaining debt and archives it automatically after full repayment.
 - Creates and edits ordinary Markdown files instead of hiding financial records in a proprietary database.
 - Imports and exports accounts, operations, transfers, plans, debts, and categories as a single Excel workbook.
 - Supports Russian and English interfaces, light and dark Obsidian themes, desktop and mobile layouts.
@@ -173,6 +174,7 @@ closed_at: "2026-11-03T12:00:00.000Z"
 A positive debt amount means the person owes you. A negative amount means you owe the person.
 When the Person Network connector is enabled, the debt editor can replace the plain name and icon with a Person Network note and its photo. The `person` field is optional for ordinary debts.
 Closing a debt adds `closed_at` and moves it out of the active list. The archive button on the Debts page switches between active and closed debts; restoring a debt removes `closed_at`.
+Use **Plan repayment** from a debt menu to create a linked income or expense plan. Linked plans store `debt_id`. Partial completion updates the outstanding amount; full completion adds `closed_at` automatically.
 
 ### Categories
 
@@ -208,6 +210,7 @@ Oxill Finance — локальный инструмент финансового
 - планирование ожидаемых доходов с датой, категорией и счётом зачисления;
 - планирование будущих переводов между счетами;
 - учёт долгов по обычному названию или, через необязательный коннектор Person Network, по заметке человека с его фотографией; закрытые долги сохраняются в обратимом архиве;
+- создание из долга связанного планового дохода или расхода: выполнение уменьшает остаток, а полное погашение автоматически переносит долг в архив;
 - импорт и экспорт операций, счетов, переводов, планов, долгов и категорий через единый Excel-файл;
 - создание, переименование и удаление категорий с обязательным переносом связанных заметок;
 - русский и английский интерфейс, светлая и тёмная темы, адаптивная компоновка.

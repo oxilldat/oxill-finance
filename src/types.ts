@@ -49,6 +49,7 @@ export interface ExpensePlan {
   status: ExpensePlanStatus;
   completion: ExpensePlanCompletion;
   paidAt?: Date;
+  debtId?: string;
   file: TFile;
 }
 
@@ -62,6 +63,7 @@ export interface IncomePlan {
   status: ExpensePlanStatus;
   completion: IncomePlanCompletion;
   paidAt?: Date;
+  debtId?: string;
   file: TFile;
 }
 
@@ -84,6 +86,8 @@ export interface FinanceDebt {
   amount: number;
   comment?: string;
   archivedAt?: Date;
+  repaidAmount?: number;
+  closedAmount?: number;
   file: TFile;
 }
 

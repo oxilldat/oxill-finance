@@ -3,6 +3,7 @@ import { App, normalizePath, TFile } from "obsidian";
 import { ExpensePlan, ExpensePlanCompletion, ExpensePlanStatus, FinanceAccount, FinanceDebt, FinanceIndex, FinanceMonthSummary, FinanceTransaction, FinanceTransfer, IncomePlan, IncomePlanCompletion, MonthSummaryCategory, PlannedTransfer, TransactionKind } from "./types";
 import { t } from "./i18n";
 import { normalizeAccountIcon } from "./core/account-icons";
+import { calculateDebtPayment } from "./core/debts";
 
 type Frontmatter = Record<string, unknown>;
 
@@ -29,6 +30,7 @@ export interface NewExpensePlan {
   completion: ExpensePlanCompletion;
   status?: ExpensePlanStatus;
   paidAt?: Date;
+  debtId?: string;
 }
 export interface NewIncomePlan {
   id?: string;
@@ -40,9 +42,10 @@ export interface NewIncomePlan {
   completion: IncomePlanCompletion;
   status?: ExpensePlanStatus;
   paidAt?: Date;
+  debtId?: string;
 }
 export interface NewPlannedTransfer { id?: string; amount: number; dueDate: Date; fromAccountId: string; toAccountId: string; status?: ExpensePlanStatus; paidAt?: Date; }
-export interface NewDebt { id?: string; name: string; personPath?: string; icon: string; amount: number; comment?: string; archivedAt?: Date; }
+export interface NewDebt { id?: string; name: string; personPath?: string; icon: string; amount: number; comment?: string; archivedAt?: Date; repaidAmount?: number; }
 export interface NewMonthSummary {
   id?: string;
   period: string;
@@ -182,6 +185,7 @@ export class TransactionStore {
       `due_date: ${quote(input.dueDate.toISOString())}`, `category: ${quote(input.category)}`,
       ...(input.accountId ? [`account_id: ${quote(input.accountId)}`] : []),
       `completion: ${input.completion}`, `status: ${input.status ?? "planned"}`,
+      ...(input.debtId ? [`debt_id: ${quote(input.debtId)}`] : []),
       ...(input.paidAt ? [`paid_at: ${quote(input.paidAt.toISOString())}`] : []),
       "---", "", `# ${input.title}`, "",
     ].join("\n");
@@ -210,6 +214,7 @@ export class TransactionStore {
     if (plan.status === "paid") return;
     plan.status = "paid";
     try {
+      const debt = this.validateDebtPayment(plan.debtId, plan.amount, "expense");
       if (plan.completion === "create-expense") {
         const account = plan.accountId ? this.getAccount(plan.accountId) : undefined;
         if (account && plan.amount > account.balance) throw new Error(t("На выбранном счёте недостаточно средств", "Insufficient funds in the selected account"));
@@ -218,6 +223,7 @@ export class TransactionStore {
           comment: `${t("План", "Plan")}: ${plan.title}`, accountId: plan.accountId,
         });
       }
+      if (debt) await this.applyDebtPayment(debt, plan.amount);
       await this.app.fileManager.processFrontMatter(plan.file, (data) => {
         setFrontmatterValue(data, "status", "paid");
         setFrontmatterValue(data, "paid_at", new Date().toISOString());
@@ -238,6 +244,7 @@ export class TransactionStore {
       `due_date: ${quote(input.dueDate.toISOString())}`, `category: ${quote(input.category)}`,
       ...(input.accountId ? [`account_id: ${quote(input.accountId)}`] : []),
       `completion: ${input.completion}`, `status: ${input.status ?? "planned"}`,
+      ...(input.debtId ? [`debt_id: ${quote(input.debtId)}`] : []),
       ...(input.paidAt ? [`paid_at: ${quote(input.paidAt.toISOString())}`] : []),
       "---", "", `# ${input.title}`, "",
     ].join("\n");
@@ -264,12 +271,14 @@ export class TransactionStore {
     if (plan.status === "paid") return;
     plan.status = "paid";
     try {
+      const debt = this.validateDebtPayment(plan.debtId, plan.amount, "income");
       if (plan.completion === "create-income") {
         await this.createTransaction({
           kind: "income", amount: plan.amount, date: new Date(), category: plan.category,
           comment: `${t("План", "Plan")}: ${plan.title}`, accountId: plan.accountId,
         });
       }
+      if (debt) await this.applyDebtPayment(debt, plan.amount);
       await this.app.fileManager.processFrontMatter(plan.file, (data) => {
         setFrontmatterValue(data, "status", "paid");
         setFrontmatterValue(data, "paid_at", new Date().toISOString());
@@ -336,6 +345,7 @@ export class TransactionStore {
       ...(input.personPath ? [`person: ${quote(input.personPath)}`] : []),
       `icon: ${quote(normalizeAccountIcon(input.icon))}`,
       `amount: ${input.amount}`, ...(input.comment ? [`comment: ${quote(input.comment)}`] : []),
+      ...(input.repaidAmount !== undefined ? [`repaid_amount: ${input.repaidAmount}`] : []),
       ...(input.archivedAt ? [`closed_at: ${quote(input.archivedAt.toISOString())}`] : []),
       "---", "", `# ${t("Долг", "Debt")}: ${input.personPath ? `[[${input.personPath}|${name}]]` : name}`, "",
     ].join("\n");
@@ -352,6 +362,7 @@ export class TransactionStore {
       else deleteFrontmatterValue(data, "person");
       setFrontmatterValue(data, "icon", normalizeAccountIcon(input.icon));
       setFrontmatterValue(data, "amount", input.amount);
+      if (debt.archivedAt && debt.closedAmount !== undefined) setFrontmatterValue(data, "closed_amount", input.amount);
       if (input.comment) setFrontmatterValue(data, "comment", input.comment);
       else deleteFrontmatterValue(data, "comment");
     });
@@ -362,7 +373,34 @@ export class TransactionStore {
   async setDebtArchived(debt: FinanceDebt, archived: boolean): Promise<void> {
     await this.app.fileManager.processFrontMatter(debt.file, (data) => {
       if (archived) setFrontmatterValue(data, "closed_at", new Date().toISOString());
-      else deleteFrontmatterValue(data, "closed_at");
+      else {
+        if (debt.closedAmount !== undefined) setFrontmatterValue(data, "amount", debt.closedAmount);
+        deleteFrontmatterValue(data, "closed_at");
+        deleteFrontmatterValue(data, "closed_amount");
+        deleteFrontmatterValue(data, "repaid_amount");
+      }
+    });
+  }
+
+  private validateDebtPayment(debtId: string | undefined, amount: number, kind: TransactionKind): FinanceDebt | undefined {
+    if (!debtId) return undefined;
+    const debt = this.index.debts.find((item) => item.id === debtId);
+    if (!debt || debt.archivedAt) throw new Error(t("Связанный долг не найден среди активных", "Linked debt was not found among active debts"));
+    if ((kind === "expense" && debt.amount > 0) || (kind === "income" && debt.amount < 0)) {
+      throw new Error(t("Тип плана не соответствует направлению долга", "Plan type does not match the debt direction"));
+    }
+    if (amount - Math.abs(debt.amount) > 0.005) throw new Error(t("Платёж превышает остаток долга", "Payment exceeds the remaining debt"));
+    return debt;
+  }
+
+  private async applyDebtPayment(debt: FinanceDebt, amount: number): Promise<void> {
+    const result = calculateDebtPayment(debt.amount, debt.repaidAmount ?? 0, amount);
+    await this.app.fileManager.processFrontMatter(debt.file, (data) => {
+      setFrontmatterValue(data, "repaid_amount", result.repaidAmount);
+      if (result.closedAmount !== undefined) {
+        setFrontmatterValue(data, "closed_amount", result.closedAmount);
+        setFrontmatterValue(data, "closed_at", new Date().toISOString());
+      } else setFrontmatterValue(data, "amount", result.remainingAmount);
     });
   }
 
@@ -513,7 +551,8 @@ function parseExpensePlan(file: TFile, data: Frontmatter): ExpensePlan {
   return {
     id: requiredString(data.finance_id, "finance_id"), title: requiredString(data.title, "title"), amount,
     dueDate, category: optionalString(data.category) ?? t("Без категории", "Uncategorized"), accountId: optionalString(data.account_id),
-    status, completion, paidAt: paidAt && !Number.isNaN(paidAt.getTime()) ? paidAt : undefined, file,
+    status, completion, paidAt: paidAt && !Number.isNaN(paidAt.getTime()) ? paidAt : undefined,
+    debtId: optionalString(data.debt_id), file,
   };
 }
 
@@ -527,7 +566,8 @@ function parseIncomePlan(file: TFile, data: Frontmatter): IncomePlan {
   return {
     id: requiredString(data.finance_id, "finance_id"), title: requiredString(data.title, "title"), amount, dueDate,
     category: optionalString(data.category) ?? t("Без категории", "Uncategorized"), accountId: optionalString(data.account_id),
-    status, completion, paidAt: paidAtValue ? validDate(paidAtValue) : undefined, file,
+    status, completion, paidAt: paidAtValue ? validDate(paidAtValue) : undefined,
+    debtId: optionalString(data.debt_id), file,
   };
 }
 
@@ -551,10 +591,17 @@ function parseDebt(file: TFile, data: Frontmatter): FinanceDebt {
   const amount = Number(data.amount);
   if (!Number.isFinite(amount) || Math.abs(amount) < 0.005) throw new Error(t("amount долга должен быть ненулевым числом", "Debt amount must be a non-zero number"));
   const archivedAtValue = optionalString(data.closed_at);
+  const repaidAmountValue = data.repaid_amount === undefined ? undefined : nonNegativeAmount(data.repaid_amount);
+  const closedAmountValue = data.closed_amount === undefined ? undefined : Number(data.closed_amount);
+  if (closedAmountValue !== undefined && (!Number.isFinite(closedAmountValue) || Math.abs(closedAmountValue) < 0.005)) {
+    throw new Error(t("closed_amount долга должен быть ненулевым числом", "Debt closed_amount must be a non-zero number"));
+  }
   return {
     id: requiredString(data.finance_id, "finance_id"), name, personPath,
-    icon: normalizeAccountIcon(optionalString(data.icon)), amount, comment: optionalString(data.comment),
-    archivedAt: archivedAtValue ? validDate(archivedAtValue) : undefined, file,
+    icon: normalizeAccountIcon(optionalString(data.icon)),
+    amount: archivedAtValue && closedAmountValue !== undefined ? closedAmountValue : amount,
+    comment: optionalString(data.comment), archivedAt: archivedAtValue ? validDate(archivedAtValue) : undefined,
+    repaidAmount: repaidAmountValue, closedAmount: closedAmountValue, file,
   };
 }
 

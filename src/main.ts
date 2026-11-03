@@ -17,6 +17,7 @@ import { FinanceIndex } from "./types";
 import { createMonthSummarySnapshot, monthPeriod } from "./core/month-summary";
 import { MonthSummaryModal } from "./month-summary-modal";
 import { PersonNetworkConnector } from "./person-network-connector";
+import { DebtPlanModal } from "./debt-plan-modal";
 
 export default class OxillFinancePlugin extends Plugin {
   private store!: TransactionStore;
@@ -79,6 +80,7 @@ export default class OxillFinancePlugin extends Plugin {
       editDebt: (debt) => new DebtModal(this.app, this.store, this.personNetwork, this.settings.personNetworkConnectorEnabled, () => this.scheduleRefresh(120), debt).open(),
       deleteDebt: (debt) => new DeleteDebtModal(this.app, this.store, debt, () => this.scheduleRefresh(120)).open(),
       setDebtArchived: (debt, archived) => void this.setDebtArchived(debt, archived),
+      planDebtPayment: (debt) => new DebtPlanModal(this.app, this.store, debt, () => this.scheduleRefresh(120)).open(),
       createPlan: (category, dueDate) => new ExpensePlanModal(this.app, this.store, () => this.scheduleRefresh(120), undefined, { category, dueDate }).open(),
       editPlan: (plan) => new ExpensePlanModal(this.app, this.store, () => this.scheduleRefresh(120), plan).open(),
       deletePlan: (plan) => new DeleteExpensePlanModal(this.app, this.store, plan, () => this.scheduleRefresh(120)).open(),
