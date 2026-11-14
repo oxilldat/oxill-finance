@@ -12,6 +12,7 @@ export interface FinanceTransaction {
   comment?: string;
   accountId?: string;
   externalId?: string;
+  debtId?: string;
   file: TFile;
 }
 
@@ -50,6 +51,7 @@ export interface ExpensePlan {
   completion: ExpensePlanCompletion;
   paidAt?: Date;
   debtId?: string;
+  fundedByIncomePlanId?: string;
   file: TFile;
 }
 
@@ -75,6 +77,7 @@ export interface PlannedTransfer {
   toAccountId: string;
   status: ExpensePlanStatus;
   paidAt?: Date;
+  fundedByIncomePlanId?: string;
   file: TFile;
 }
 

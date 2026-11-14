@@ -10,6 +10,7 @@ Local-first personal finance planning for Obsidian. Oxill Finance turns Markdown
 
 - Shows income, expenses, balance, category breakdown, cash-flow dynamics, and operation history.
 - Supports custom accounts, drag-and-drop account ordering, account-to-account transfers, and account balances calculated from notes.
+- Uses a required default account for new income and expenses; the default can be changed in settings and is protected from deletion.
 - Provides yearly expense planning with a category-by-month heatmap.
 - Plans future income and account-to-account transfers, and turns completed plans into ordinary operations.
 - Tracks personal debts by name or, through the optional Person Network connector, by a linked person note and photo; closed debts remain available in a reversible archive.
@@ -77,7 +78,7 @@ comment: Optional comment
 ---
 ```
 
-`operation` can be `income` or `expense`. `account_id` is optional: an operation without it remains part of the general analytics but does not affect an individual account.
+`operation` can be `income` or `expense`. New operations created through the plugin always include `account_id`; imported legacy notes without it remain readable for backward compatibility.
 
 Account:
 
@@ -174,7 +175,7 @@ closed_at: "2026-11-03T12:00:00.000Z"
 A positive debt amount means the person owes you. A negative amount means you owe the person.
 When the Person Network connector is enabled, the debt editor can replace the plain name and icon with a Person Network note and its photo. The `person` field is optional for ordinary debts.
 Closing a debt adds `closed_at` and moves it out of the active list. The archive button on the Debts page switches between active and closed debts; restoring a debt removes `closed_at`.
-Use **Plan → Debt repayment** or **Plan → Debt collection** from the Planning page to create a linked expense or income plan. Select an active debt in the form. Linked plans store `debt_id`; partial completion updates the outstanding amount and full completion adds `closed_at` automatically.
+Use **Plan → Debt repayment** or **Plan → Debt collection** from the Planning page, or plan directly from a debt's action menu. Linked plans store `debt_id`; the debt list shows the scheduled amount, nearest date, and unplanned balance. Pending plans reserve their amount so the same balance cannot be planned twice. Completion creates the linked account operation, partial completion updates the outstanding amount, and full completion adds `closed_at` automatically.
 
 ### Categories
 
@@ -206,11 +207,12 @@ Oxill Finance — локальный инструмент финансового
 
 - обзор доходов, расходов, баланса, категорий, динамики и истории операций;
 - пользовательские счета с ручной сортировкой перетаскиванием и переводы между ними без ложных доходов и расходов;
+- обязательный счёт по умолчанию для новых доходов и расходов с защитой от удаления;
 - годовое планирование будущих расходов в виде тепловой карты;
 - планирование ожидаемых доходов с датой, категорией и счётом зачисления;
 - планирование будущих переводов между счетами;
 - учёт долгов по обычному названию или, через необязательный коннектор Person Network, по заметке человека с его фотографией; закрытые долги сохраняются в обратимом архиве;
-- создание из долга связанного планового дохода или расхода: выполнение уменьшает остаток, а полное погашение автоматически переносит долг в архив;
+- создание из долга связанного планового дохода или расхода прямо из планирования либо меню долга; запланированная сумма резервируется, ближайшая дата видна в списке, выполнение создаёт операцию, а полное погашение автоматически переносит долг в архив;
 - импорт и экспорт операций, счетов, переводов, планов, долгов и категорий через единый Excel-файл;
 - создание, переименование и удаление категорий с обязательным переносом связанных заметок;
 - русский и английский интерфейс, светлая и тёмная темы, адаптивная компоновка.

@@ -16,6 +16,7 @@ export interface NewTransaction {
   comment?: string;
   accountId?: string;
   externalId?: string;
+  debtId?: string;
 }
 
 export interface NewAccount { id?: string; name: string; icon: string; order?: number; }
@@ -31,6 +32,7 @@ export interface NewExpensePlan {
   status?: ExpensePlanStatus;
   paidAt?: Date;
   debtId?: string;
+  fundedByIncomePlanId?: string;
 }
 export interface NewIncomePlan {
   id?: string;
@@ -44,7 +46,7 @@ export interface NewIncomePlan {
   paidAt?: Date;
   debtId?: string;
 }
-export interface NewPlannedTransfer { id?: string; amount: number; dueDate: Date; fromAccountId: string; toAccountId: string; status?: ExpensePlanStatus; paidAt?: Date; }
+export interface NewPlannedTransfer { id?: string; amount: number; dueDate: Date; fromAccountId: string; toAccountId: string; status?: ExpensePlanStatus; paidAt?: Date; fundedByIncomePlanId?: string; }
 export interface NewDebt { id?: string; name: string; personPath?: string; icon: string; amount: number; comment?: string; archivedAt?: Date; repaidAmount?: number; }
 export interface NewMonthSummary {
   id?: string;
@@ -100,6 +102,7 @@ export class TransactionStore {
       `category: ${quote(input.category)}`,
       ...(input.accountId ? [`account_id: ${quote(input.accountId)}`] : []),
       ...(input.externalId ? [`external_id: ${quote(input.externalId)}`] : []),
+      ...(input.debtId ? [`debt_id: ${quote(input.debtId)}`] : []),
       ...(input.comment ? [`comment: ${quote(input.comment)}`] : []),
       "---",
       "",
@@ -186,6 +189,7 @@ export class TransactionStore {
       ...(input.accountId ? [`account_id: ${quote(input.accountId)}`] : []),
       `completion: ${input.completion}`, `status: ${input.status ?? "planned"}`,
       ...(input.debtId ? [`debt_id: ${quote(input.debtId)}`] : []),
+      ...(input.fundedByIncomePlanId ? [`funded_by_income: ${quote(input.fundedByIncomePlanId)}`] : []),
       ...(input.paidAt ? [`paid_at: ${quote(input.paidAt.toISOString())}`] : []),
       "---", "", `# ${input.title}`, "",
     ].join("\n");
@@ -203,6 +207,15 @@ export class TransactionStore {
       setFrontmatterValue(data, "completion", input.completion);
       if (input.accountId) setFrontmatterValue(data, "account_id", input.accountId);
       else deleteFrontmatterValue(data, "account_id");
+      if (input.fundedByIncomePlanId) setFrontmatterValue(data, "funded_by_income", input.fundedByIncomePlanId);
+      else deleteFrontmatterValue(data, "funded_by_income");
+    });
+  }
+
+  async setExpensePlanFunding(plan: ExpensePlan, incomePlanId?: string): Promise<void> {
+    await this.app.fileManager.processFrontMatter(plan.file, (data) => {
+      if (incomePlanId) setFrontmatterValue(data, "funded_by_income", incomePlanId);
+      else deleteFrontmatterValue(data, "funded_by_income");
     });
   }
 
@@ -220,7 +233,7 @@ export class TransactionStore {
         if (account && plan.amount > account.balance) throw new Error(t("На выбранном счёте недостаточно средств", "Insufficient funds in the selected account"));
         await this.createTransaction({
           kind: "expense", amount: plan.amount, date: new Date(), category: plan.category,
-          comment: `${t("План", "Plan")}: ${plan.title}`, accountId: plan.accountId,
+          comment: `${t("План", "Plan")}: ${plan.title}`, accountId: plan.accountId, debtId: plan.debtId,
         });
       }
       if (debt) await this.applyDebtPayment(debt, plan.amount);
@@ -265,7 +278,13 @@ export class TransactionStore {
     });
   }
 
-  async deleteIncomePlan(plan: IncomePlan): Promise<void> { await this.app.fileManager.trashFile(plan.file); }
+  async deleteIncomePlan(plan: IncomePlan): Promise<void> {
+    const linkedExpenses = this.index.plans.filter((item) => item.fundedByIncomePlanId === plan.id);
+    const linkedTransfers = this.index.plannedTransfers.filter((item) => item.fundedByIncomePlanId === plan.id);
+    for (const expense of linkedExpenses) await this.setExpensePlanFunding(expense);
+    for (const transfer of linkedTransfers) await this.setPlannedTransferFunding(transfer);
+    await this.app.fileManager.trashFile(plan.file);
+  }
 
   async completeIncomePlan(plan: IncomePlan): Promise<void> {
     if (plan.status === "paid") return;
@@ -275,7 +294,7 @@ export class TransactionStore {
       if (plan.completion === "create-income") {
         await this.createTransaction({
           kind: "income", amount: plan.amount, date: new Date(), category: plan.category,
-          comment: `${t("План", "Plan")}: ${plan.title}`, accountId: plan.accountId,
+          comment: `${t("План", "Plan")}: ${plan.title}`, accountId: plan.accountId, debtId: plan.debtId,
         });
       }
       if (debt) await this.applyDebtPayment(debt, plan.amount);
@@ -298,6 +317,7 @@ export class TransactionStore {
       `amount: ${input.amount}`, `due_date: ${quote(input.dueDate.toISOString())}`,
       `from_account: ${quote(input.fromAccountId)}`, `to_account: ${quote(input.toAccountId)}`,
       `status: ${input.status ?? "planned"}`,
+      ...(input.fundedByIncomePlanId ? [`funded_by_income: ${quote(input.fundedByIncomePlanId)}`] : []),
       ...(input.paidAt ? [`paid_at: ${quote(input.paidAt.toISOString())}`] : []),
       "---", "", `# ${t("Плановый перевод", "Planned transfer")}`, "",
     ].join("\n");
@@ -312,6 +332,15 @@ export class TransactionStore {
       setFrontmatterValue(data, "due_date", input.dueDate.toISOString());
       setFrontmatterValue(data, "from_account", input.fromAccountId);
       setFrontmatterValue(data, "to_account", input.toAccountId);
+      if (input.fundedByIncomePlanId) setFrontmatterValue(data, "funded_by_income", input.fundedByIncomePlanId);
+      else deleteFrontmatterValue(data, "funded_by_income");
+    });
+  }
+
+  async setPlannedTransferFunding(plan: PlannedTransfer, incomePlanId?: string): Promise<void> {
+    await this.app.fileManager.processFrontMatter(plan.file, (data) => {
+      if (incomePlanId) setFrontmatterValue(data, "funded_by_income", incomePlanId);
+      else deleteFrontmatterValue(data, "funded_by_income");
     });
   }
 
@@ -508,6 +537,7 @@ function parseTransaction(file: TFile, data: Frontmatter): FinanceTransaction {
     comment: optionalString(data.comment),
     accountId: optionalString(data.account_id),
     externalId: optionalString(data.external_id),
+    debtId: optionalString(data.debt_id),
     file,
   };
 }
@@ -552,7 +582,7 @@ function parseExpensePlan(file: TFile, data: Frontmatter): ExpensePlan {
     id: requiredString(data.finance_id, "finance_id"), title: requiredString(data.title, "title"), amount,
     dueDate, category: optionalString(data.category) ?? t("Без категории", "Uncategorized"), accountId: optionalString(data.account_id),
     status, completion, paidAt: paidAt && !Number.isNaN(paidAt.getTime()) ? paidAt : undefined,
-    debtId: optionalString(data.debt_id), file,
+    debtId: optionalString(data.debt_id), fundedByIncomePlanId: optionalString(data.funded_by_income), file,
   };
 }
 
@@ -580,7 +610,8 @@ function parsePlannedTransfer(file: TFile, data: Frontmatter): PlannedTransfer {
     id: requiredString(data.finance_id, "finance_id"), amount, dueDate,
     fromAccountId: requiredString(data.from_account, "from_account"),
     toAccountId: requiredString(data.to_account, "to_account"), status,
-    paidAt: paidAtValue ? validDate(paidAtValue) : undefined, file,
+    paidAt: paidAtValue ? validDate(paidAtValue) : undefined,
+    fundedByIncomePlanId: optionalString(data.funded_by_income), file,
   };
 }
 

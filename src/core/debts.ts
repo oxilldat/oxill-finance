@@ -31,6 +31,28 @@ export interface DebtPaymentResult {
   closedAmount?: number;
 }
 
+export interface DebtPlanningStatus {
+  plannedAmount: number;
+  unplannedAmount: number;
+  nextDueDate?: Date;
+}
+
+export function summarizeDebtPlanning(
+  debt: { id: string; amount: number },
+  expensePlans: readonly { debtId?: string; amount: number; status: string; dueDate: Date }[],
+  incomePlans: readonly { debtId?: string; amount: number; status: string; dueDate: Date }[],
+): DebtPlanningStatus {
+  const source = debt.amount < 0 ? expensePlans : incomePlans;
+  const plans = source.filter((plan) => plan.debtId === debt.id && plan.status === "planned");
+  const plannedAmount = plans.reduce((sum, plan) => sum + plan.amount, 0);
+  const nextDueDate = plans.reduce<Date | undefined>((next, plan) => !next || plan.dueDate < next ? plan.dueDate : next, undefined);
+  return {
+    plannedAmount,
+    unplannedAmount: Math.max(0, Math.abs(debt.amount) - plannedAmount),
+    nextDueDate,
+  };
+}
+
 export function calculateDebtPayment(amount: number, repaidAmount: number, payment: number): DebtPaymentResult {
   const sign = amount > 0 ? 1 : -1;
   const current = Math.abs(amount);

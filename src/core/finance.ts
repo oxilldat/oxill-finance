@@ -21,7 +21,7 @@ export function calculateSummary(
   now = new Date(),
   rangeOverride?: { start: Date; end: Date; label: string },
 ): FinanceSummary {
-  const range = rangeOverride ?? getRange(period, now);
+  const range = rangeOverride ?? getPeriodRange(period, now);
   const visible: FinanceTransaction[] = [];
   let income = 0;
   let expense = 0;
@@ -130,7 +130,7 @@ function monthBuckets(period: PeriodKind, now: Date): Array<FlowBucket & { key: 
   });
 }
 
-function getRange(period: PeriodKind, now: Date): { start: Date; end: Date; label: string } {
+export function getPeriodRange(period: PeriodKind, now: Date): { start: Date; end: Date; label: string } {
   const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
   if (period === "day") {
     return {

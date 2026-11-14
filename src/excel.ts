@@ -32,14 +32,14 @@ export function createFinanceWorkbook(index: FinanceIndex, categories: string[],
   if (!template) {
     for (const item of index.transactions) operationRows.push([
       item.id, item.kind, item.amount, item.date, item.category, item.accountId ?? "",
-      item.accountId ? accountNames.get(item.accountId) ?? "" : "", "", "", "", "", item.comment ?? "", item.file.path, item.externalId ?? "",
+      item.accountId ? accountNames.get(item.accountId) ?? "" : "", "", "", "", "", item.comment ?? "", item.file.path, item.externalId ?? "", item.debtId ?? "",
     ]);
     for (const item of index.transfers) operationRows.push([
       item.id, "transfer", item.amount, item.date, "", "", "", item.fromAccountId,
-      accountNames.get(item.fromAccountId) ?? "", item.toAccountId, accountNames.get(item.toAccountId) ?? "", item.comment ?? "", item.file.path, item.externalId ?? "",
+      accountNames.get(item.fromAccountId) ?? "", item.toAccountId, accountNames.get(item.toAccountId) ?? "", item.comment ?? "", item.file.path, item.externalId ?? "", "",
     ]);
   }
-  appendSheet(book, SHEETS.operations, operationRows, [18, 12, 14, 20, 20, 20, 20, 20, 20, 20, 20, 28, 34, 22]);
+  appendSheet(book, SHEETS.operations, operationRows, [18, 12, 14, 20, 20, 20, 20, 20, 20, 20, 20, 28, 34, 22, 22]);
 
   const accountRows: unknown[][] = [excelHeaders("accounts", locale)];
   if (!template) for (const account of index.accounts) accountRows.push([account.id, account.name, account.icon, account.order ?? "", account.balance, account.file.path]);
@@ -48,9 +48,9 @@ export function createFinanceWorkbook(index: FinanceIndex, categories: string[],
   const planRows: unknown[][] = [excelHeaders("planning", locale)];
   if (!template) for (const plan of index.plans) planRows.push([
     plan.id, plan.title, plan.amount, plan.dueDate, plan.category, plan.accountId ?? "",
-    plan.accountId ? accountNames.get(plan.accountId) ?? "" : "", plan.completion, plan.status, plan.paidAt ?? "", plan.debtId ?? "", plan.file.path,
+    plan.accountId ? accountNames.get(plan.accountId) ?? "" : "", plan.completion, plan.status, plan.paidAt ?? "", plan.debtId ?? "", plan.fundedByIncomePlanId ?? "", plan.file.path,
   ]);
-  appendSheet(book, SHEETS.planning, planRows, [22, 28, 14, 20, 20, 20, 20, 20, 12, 20, 22, 34]);
+  appendSheet(book, SHEETS.planning, planRows, [22, 28, 14, 20, 20, 20, 20, 20, 12, 20, 22, 24, 34]);
   const incomePlanRows: unknown[][] = [excelHeaders("incomePlanning", locale)];
   if (!template) for (const plan of index.incomePlans) incomePlanRows.push([
     plan.id, plan.title, plan.amount, plan.dueDate, plan.category, plan.accountId ?? "",
@@ -60,9 +60,9 @@ export function createFinanceWorkbook(index: FinanceIndex, categories: string[],
   const plannedTransferRows: unknown[][] = [excelHeaders("plannedTransfers", locale)];
   if (!template) for (const plan of index.plannedTransfers) plannedTransferRows.push([
     plan.id, plan.amount, plan.dueDate, plan.fromAccountId, accountNames.get(plan.fromAccountId) ?? "",
-    plan.toAccountId, accountNames.get(plan.toAccountId) ?? "", plan.status, plan.paidAt ?? "", plan.file.path,
+    plan.toAccountId, accountNames.get(plan.toAccountId) ?? "", plan.status, plan.paidAt ?? "", plan.fundedByIncomePlanId ?? "", plan.file.path,
   ]);
-  appendSheet(book, SHEETS.plannedTransfers, plannedTransferRows, [22, 14, 20, 22, 22, 22, 22, 12, 20, 34]);
+  appendSheet(book, SHEETS.plannedTransfers, plannedTransferRows, [22, 14, 20, 22, 22, 22, 22, 12, 20, 24, 34]);
   const debtRows: unknown[][] = [excelHeaders("debts", locale)];
   if (!template) for (const debt of index.debts) debtRows.push([debt.id, debt.name, debt.personPath ?? "", debt.icon, debt.amount, debt.repaidAmount ?? "", debt.comment ?? "", debt.archivedAt ?? "", debt.file.path]);
   appendSheet(book, SHEETS.debts, debtRows, [22, 26, 34, 18, 18, 18, 30, 22, 34]);
@@ -127,7 +127,7 @@ export function parseFinanceWorkbook(data: ArrayBuffer, index: FinanceIndex): Ex
       } else {
         const category = required(row, ["category", "категория"], "category");
         const accountId = resolveOptionalAccount(row, ["account_id", "account id", "счет_id", "id счёта", "id счета"], ["account_name", "account", "счет", "счёт"], accountsById, accountsByName);
-        result.transactions.push({ id, kind, amount, date, category, accountId, comment, externalId: externalId || undefined });
+        result.transactions.push({ id, kind, amount, date, category, accountId, comment, externalId: externalId || undefined, debtId: text(row, ["debt_id", "debt id", "id долга"]) || undefined });
         if (!result.categories.includes(category)) result.categories.push(category);
       }
       existingIds.add(id);
@@ -151,6 +151,7 @@ export function parseFinanceWorkbook(data: ArrayBuffer, index: FinanceIndex): Ex
         status: statusText === "paid" || statusText === "оплачен" ? "paid" : "planned",
         paidAt: value(row, ["paid_at", "paid at", "дата оплаты"]) ? parseDate(value(row, ["paid_at", "paid at", "дата оплаты"])) : undefined,
         debtId: text(row, ["debt_id", "debt id", "id долга"]) || undefined,
+        fundedByIncomePlanId: text(row, ["funding income id", "id дохода финансирования"]) || undefined,
       });
       existingIds.add(id);
       if (!result.categories.includes(category)) result.categories.push(category);
@@ -191,7 +192,11 @@ export function parseFinanceWorkbook(data: ArrayBuffer, index: FinanceIndex): Ex
       const id = text(row, ["finance id", "id"]) || stableId("transfer-plan", `${dueDate.toISOString()}|${fromAccountId}|${toAccountId}`);
       if (existingIds.has(id)) { result.skipped++; continue; }
       const status = normalize(text(row, ["status", "статус"]));
-      result.plannedTransfers.push({ id, amount: positiveAmount(value(row, ["amount", "сумма"])), dueDate, fromAccountId, toAccountId, status: status === "paid" || status === "выполнен" ? "paid" : "planned" });
+      result.plannedTransfers.push({
+        id, amount: positiveAmount(value(row, ["amount", "сумма"])), dueDate, fromAccountId, toAccountId,
+        status: status === "paid" || status === "выполнен" ? "paid" : "planned",
+        fundedByIncomePlanId: text(row, ["funding income id", "id дохода финансирования"]) || undefined,
+      });
       existingIds.add(id);
     } catch (error) { result.errors.push(rowError(SHEETS.plannedTransfers, line, error)); }
   }

@@ -1,9 +1,11 @@
 import { ItemView, Menu, setIcon, WorkspaceLeaf } from "obsidian";
 
-import { calculateSummary, selectCategorySlices } from "./core/finance";
+import { calculateSummary, getPeriodRange, selectCategorySlices } from "./core/finance";
 import { normalizeAccountIcon } from "./core/account-icons";
 import { splitDebtsByArchive, summarizeDebts } from "./core/debts";
+import { summarizeDebtPlanning } from "./core/debts";
 import { calculateMonthlyPlanningBudget } from "./core/planning";
+import { calculateIncomeAllocation } from "./core/income-allocation";
 import { monthPeriod } from "./core/month-summary";
 import { renderAccuracy } from "./month-summary-modal";
 import { TransactionStore } from "./transaction-store";
@@ -14,6 +16,14 @@ import { ConnectedPerson } from "./person-network-connector";
 export const VIEW_TYPE_FINANCE = "oxill-finance-dashboard";
 type NavigationItem = "overview" | "accounts" | "debts" | "planning";
 export type DebtPlanDirection = "pay" | "receive";
+type RecentOperation = {
+  kind: TransactionKind | "transfer";
+  amount: number;
+  date: Date;
+  title: string;
+  subtitle: string;
+  file: FinanceTransaction["file"];
+};
 export interface FinanceViewActions {
   openTransaction: (kind: TransactionKind, accountId?: string) => void;
   createAccount: () => void;
@@ -25,8 +35,8 @@ export interface FinanceViewActions {
   editDebt: (debt: FinanceDebt) => void;
   deleteDebt: (debt: FinanceDebt) => void;
   setDebtArchived: (debt: FinanceDebt, archived: boolean) => void;
-  planDebtPayment: (direction: DebtPlanDirection) => void;
-  createPlan: (category?: string, dueDate?: Date) => void;
+  planDebtPayment: (direction: DebtPlanDirection, debtId?: string) => void;
+  createPlan: (category?: string, dueDate?: Date, fundedByIncomePlanId?: string) => void;
   editPlan: (plan: ExpensePlan) => void;
   deletePlan: (plan: ExpensePlan) => void;
   completePlan: (plan: ExpensePlan) => void;
@@ -34,10 +44,12 @@ export interface FinanceViewActions {
   editIncomePlan: (plan: IncomePlan) => void;
   deleteIncomePlan: (plan: IncomePlan) => void;
   completeIncomePlan: (plan: IncomePlan) => void;
-  createPlannedTransfer: () => void;
+  createPlannedTransfer: (dueDate?: Date, fundedByIncomePlanId?: string) => void;
   editPlannedTransfer: (plan: PlannedTransfer) => void;
   deletePlannedTransfer: (plan: PlannedTransfer) => void;
   completePlannedTransfer: (plan: PlannedTransfer) => void;
+  setExpensePlanFunding: (plan: ExpensePlan, incomePlanId?: string) => void;
+  setPlannedTransferFunding: (plan: PlannedTransfer, incomePlanId?: string) => void;
   ensureMonthSummary: (year: number, month: number) => void;
   openMonthSummary: (summary: FinanceMonthSummary) => void;
   selectedCategories: () => string[];
@@ -64,7 +76,19 @@ export class FinanceView extends ItemView {
   private planningMonth = new Date().getMonth();
   private planningMonthPickerOpen = false;
   private planningYearOverview = false;
-  private planningPanel: "expenses" | "timeline" = "expenses";
+  private planningPanel: "expenses" | "transfers" | "income" = "expenses";
+  private expenseFilterQuery = "";
+  private expenseFilterCategory = "";
+  private expenseFilterStatus: "all" | "planned" | "paid" = "all";
+  private transferFilterQuery = "";
+  private transferFilterAccountId = "";
+  private transferFilterStatus: "all" | "planned" | "paid" = "all";
+  private collapsedExpenseGroups = new Set<string>();
+  private collapsedTransferGroups = new Set<string>();
+  private draggedFundingItem?: { kind: "expense" | "transfer"; id: string };
+  private expandedIncomeAllocations = new Set<string>();
+  private unassignedAllocationOpen = true;
+  private incomeAllocationPeriod?: string;
   private draggedAccountId?: string;
   private activeSection: NavigationItem = "overview";
   private debtArchiveOpen = false;
@@ -144,7 +168,57 @@ export class FinanceView extends ItemView {
     this.renderNavButton(nav, "accounts", t("Счета", "Accounts"));
     this.renderNavButton(nav, "debts", t("Долги", "Debts"));
     this.renderNavButton(nav, "planning", t("Планирование", "Planning"));
-    if (this.activeSection === "overview") this.renderPeriod(topbar);
+    if (this.activeSection === "overview" || this.activeSection === "accounts") {
+      const actions = topbar.createDiv({ cls: "oxf-topbar-actions" });
+      this.renderPeriod(actions);
+      if (this.activeSection === "accounts") {
+        actions.createEl("button", { cls: "mod-cta oxf-create-account", text: t("+ Создать счёт", "+ Create account"), attr: { type: "button" } })
+          .addEventListener("click", () => this.actions.createAccount());
+      }
+    } else if (this.activeSection === "planning") this.renderPlanningTopbarActions(topbar);
+    else if (this.activeSection === "debts") this.renderDebtTopbarActions(topbar);
+  }
+
+  private renderPlanningTopbarActions(container: HTMLElement): void {
+    const actions = container.createDiv({ cls: "oxf-topbar-actions oxf-planning-actions" });
+    const yearControl = actions.createDiv({ cls: "oxf-year-control" });
+    const previous = yearControl.createEl("button", { attr: { type: "button", "aria-label": this.planningYearOverview ? t("Предыдущий год", "Previous year") : t("Предыдущий месяц", "Previous month") } });
+    setIcon(previous, "chevron-left");
+    previous.addEventListener("click", () => this.shiftPlanningMonth(-1));
+    const selectedPeriod = this.planningYearOverview ? String(this.planningYear) : capitalize(new Intl.DateTimeFormat(localeCode(), { month: "long", year: "numeric" }).format(new Date(this.planningYear, this.planningMonth, 1)));
+    yearControl.createEl("strong", { text: selectedPeriod });
+    const next = yearControl.createEl("button", { attr: { type: "button", "aria-label": this.planningYearOverview ? t("Следующий год", "Next year") : t("Следующий месяц", "Next month") } });
+    setIcon(next, "chevron-right");
+    next.addEventListener("click", () => this.shiftPlanningMonth(1));
+    const monthPicker = yearControl.createEl("button", { cls: "oxf-month-picker-trigger", attr: { type: "button", "aria-label": t("Выбрать месяц", "Choose month"), "aria-expanded": String(this.planningMonthPickerOpen) } });
+    setIcon(monthPicker, "calendar-days");
+    monthPicker.addEventListener("click", () => { this.planningMonthPickerOpen = !this.planningMonthPickerOpen; this.render(); });
+    if (this.planningMonthPickerOpen) this.renderPlanningMonthPicker(actions);
+    const yearOverview = actions.createEl("button", { cls: this.planningYearOverview ? "is-active" : "", text: this.planningYearOverview ? t("Месяц", "Month") : t("Год", "Year"), attr: { type: "button" } });
+    yearOverview.addEventListener("click", () => {
+      this.planningYearOverview = !this.planningYearOverview;
+      this.planningMonthPickerOpen = false;
+      this.render();
+    });
+    actions.createEl("button", { cls: "mod-cta", text: t("+ Запланировать", "+ Plan"), attr: { type: "button" } })
+      .addEventListener("click", (event) => this.showPlanningCreateMenu(event));
+  }
+
+  private renderDebtTopbarActions(container: HTMLElement): void {
+    const actions = container.createDiv({ cls: "oxf-topbar-actions oxf-debt-heading-actions" });
+    const archive = actions.createEl("button", {
+      cls: `oxf-debt-archive-toggle${this.debtArchiveOpen ? " is-active" : ""}`,
+      attr: {
+        type: "button",
+        "aria-label": this.debtArchiveOpen ? t("Вернуться к активным долгам", "Return to active debts") : t("Архив долгов", "Debt archive"),
+        title: this.debtArchiveOpen ? t("Активные долги", "Active debts") : t("Архив долгов", "Debt archive"),
+        "aria-pressed": String(this.debtArchiveOpen),
+      },
+    });
+    setIcon(archive, this.debtArchiveOpen ? "archive-restore" : "archive");
+    archive.addEventListener("click", () => { this.debtArchiveOpen = !this.debtArchiveOpen; this.render(); });
+    actions.createEl("button", { cls: "mod-cta", text: t("+ Добавить долг", "+ Add debt"), attr: { type: "button" } })
+      .addEventListener("click", () => this.actions.createDebt());
   }
 
   private renderNavButton(container: HTMLElement, value: NavigationItem, label: string): void {
@@ -253,10 +327,31 @@ export class FinanceView extends ItemView {
     const context = container.createDiv({ cls: "oxf-context-grid" });
     this.renderCategoryCard(context, summary);
     this.renderAccountsSnapshot(context);
-    const dynamics = container.createEl("section", { cls: "oxf-overview-section" });
-    this.renderFlowChart(dynamics, summary);
     const operations = container.createEl("section", { cls: "oxf-overview-section" });
-    this.renderHistory(operations, summary.transactions.slice(0, 20), t("Последние операции", "Recent transactions"));
+    const index = this.store.getIndex();
+    const accountNames = new Map(index.accounts.map((account) => [account.id, account.name]));
+    const range = this.customRange ?? getPeriodRange(this.period, this.anchorDate);
+    const recentOperations: RecentOperation[] = [
+      ...summary.transactions.map((transaction) => ({
+        kind: transaction.kind,
+        amount: transaction.amount,
+        date: transaction.date,
+        title: transaction.comment?.trim() || t("Без комментария", "No comment"),
+        subtitle: transaction.category,
+        file: transaction.file,
+      })),
+      ...index.transfers
+        .filter((transfer) => transfer.date >= range.start && transfer.date <= range.end)
+        .map((transfer) => ({
+          kind: "transfer" as const,
+          amount: transfer.amount,
+          date: transfer.date,
+          title: transfer.comment?.trim() || t("Перевод между счетами", "Account transfer"),
+          subtitle: `${accountNames.get(transfer.fromAccountId) ?? t("Неизвестный счёт", "Unknown account")} → ${accountNames.get(transfer.toAccountId) ?? t("Неизвестный счёт", "Unknown account")}`,
+          file: transfer.file,
+        })),
+    ].sort((left, right) => right.date.getTime() - left.date.getTime()).slice(0, 20);
+    this.renderRecentOperations(operations, recentOperations);
   }
 
   private renderFinanceHero(container: HTMLElement, summary: FinanceSummary): void {
@@ -346,68 +441,8 @@ export class FinanceView extends ItemView {
       row.createEl("strong", { text: `${money(account.balance)} ₽` });
     }
   }
-
-
-  private renderFlowChart(container: HTMLElement, summary: FinanceSummary): void {
-    const card = container.createEl("section", { cls: "oxf-card oxf-flow-card" });
-    const heading = card.createDiv({ cls: "oxf-card-heading" });
-    heading.createEl("strong", { text: t("Движение денег", "Cash flow") });
-    const legend = heading.createDiv({ cls: "oxf-chart-legend" });
-    legend.createSpan({ cls: "is-income", text: t("Доходы", "Income") });
-    legend.createSpan({ cls: "is-expense", text: t("Расходы", "Expenses") });
-    if (this.period === "month" && !this.customRange) {
-      this.renderMonthHeatmap(card, summary);
-      return;
-    }
-    const max = Math.max(...summary.flow.map((item) => item.income + item.expense), 1);
-    const chart = card.createDiv({ cls: "oxf-bars-chart" });
-    for (const bucket of summary.flow) {
-      const column = chart.createDiv({ cls: "oxf-chart-column" });
-      const bars = column.createDiv({ cls: "oxf-chart-bars" });
-      for (const kind of ["expense", "income"] as const) {
-        if (bucket[kind] <= 0) continue;
-        const bar = bars.createDiv({ cls: `is-${kind}` });
-        bar.setCssProps({ height: `${(bucket[kind] / max) * 100}%` });
-        bar.setAttribute("title", `${kind === "income" ? t("Доходы", "Income") : t("Расходы", "Expenses")}: ${money(bucket[kind])} ₽`);
-      }
-      column.createSpan({ text: bucket.label });
-    }
-  }
-
-  private renderMonthHeatmap(container: HTMLElement, summary: FinanceSummary): void {
-    const weekdays = container.createDiv({ cls: "oxf-heatmap-weekdays" });
-    for (const label of t("Пн,Вт,Ср,Чт,Пт,Сб,Вс", "Mon,Tue,Wed,Thu,Fri,Sat,Sun").split(",")) weekdays.createSpan({ text: label });
-
-    const calendar = container.createDiv({ cls: "oxf-heatmap" });
-    const now = this.anchorDate;
-    const firstDayOffset = (new Date(now.getFullYear(), now.getMonth(), 1).getDay() + 6) % 7;
-    for (let index = 0; index < firstDayOffset; index += 1) calendar.createDiv({ cls: "oxf-heatmap-blank" });
-
-    const maxExpense = Math.max(...summary.flow.map((bucket) => bucket.expense), 1);
-    for (const bucket of summary.flow) {
-      const intensity = bucket.expense > 0 ? Math.max(1, Math.ceil((bucket.expense / maxExpense) * 4)) : 0;
-      const cell = calendar.createDiv({ cls: `oxf-heatmap-cell is-level-${intensity}${bucket.income > 0 ? " has-income" : ""}` });
-      cell.createSpan({ text: bucket.label });
-      if (bucket.income > 0) cell.createDiv({ cls: "oxf-income-marker" });
-      cell.setAttribute("aria-label", `+${money(bucket.income)} ₽ · −${money(bucket.expense)} ₽`);
-    }
-  }
-
   private renderAccounts(container: HTMLElement): void {
     const accounts = this.store.getIndex().accounts;
-    const heading = container.createDiv({ cls: "oxf-accounts-heading" });
-    const title = heading.createDiv();
-    title.createEl("h2", { text: t("Счета", "Accounts") });
-    title.createEl("p", { text: t("Баланс рассчитывается из доходов, расходов и переводов", "Balance is calculated from income, expenses, and transfers") });
-    heading.createEl("button", { cls: "mod-cta", text: t("+ Создать счёт", "+ Create account"), attr: { type: "button" } })
-      .addEventListener("click", () => this.actions.createAccount());
-
-    const quickActions = container.createDiv({ cls: "oxf-accounts-actions" });
-    this.renderQuickAction(quickActions, "+", t("Расход", "Expense"), () => this.actions.openTransaction("expense"));
-    this.renderQuickAction(quickActions, "+", t("Доход", "Income"), () => this.actions.openTransaction("income"));
-    const transferAction = this.renderQuickAction(quickActions, "⇄", t("Перевод", "Transfer"), () => this.actions.transfer());
-    transferAction.disabled = accounts.length < 2;
-
     if (accounts.length === 0) {
       const empty = container.createDiv({ cls: "oxf-card oxf-accounts-empty" });
       empty.createEl("strong", { text: t("Счетов пока нет", "No accounts yet") });
@@ -415,7 +450,26 @@ export class FinanceView extends ItemView {
       return;
     }
 
-    const grid = container.createDiv({ cls: "oxf-accounts-list" });
+    const grid = container.createDiv({ cls: "oxf-account-grid" });
+    grid.addEventListener("dragover", (event) => {
+      if (!this.draggedAccountId) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+      const target = (event.target as HTMLElement).closest<HTMLElement>(".oxf-account-card");
+      if (target && target.dataset.accountId !== this.draggedAccountId) this.previewAccountOrder(grid, target, event);
+    });
+    grid.addEventListener("drop", (event) => {
+      if (!this.draggedAccountId) return;
+      event.preventDefault();
+      const target = (event.target as HTMLElement).closest<HTMLElement>(".oxf-account-card");
+      if (target && target.dataset.accountId !== this.draggedAccountId) this.previewAccountOrder(grid, target, event);
+      const ids = Array.from(grid.querySelectorAll<HTMLElement>(".oxf-account-card"))
+        .map((item) => item.dataset.accountId)
+        .filter((id): id is string => Boolean(id));
+      this.draggedAccountId = undefined;
+      this.clearAccountDropIndicators(grid);
+      void this.actions.reorderAccounts(ids);
+    });
     for (const account of accounts) this.renderAccountCard(grid, account, accounts);
   }
 
@@ -439,33 +493,6 @@ export class FinanceView extends ItemView {
     const hasActualOperations = index.transactions.some((item) => inSelectedMonth(item.date) && (item.kind === "income" || item.kind === "expense"));
     if (!this.planningYearOverview && !monthSummary && hasActualOperations) this.actions.ensureMonthSummary(this.planningYear, this.planningMonth);
 
-    const heading = container.createDiv({ cls: "oxf-planning-heading" });
-    const title = heading.createDiv();
-    title.createEl("h2", { text: t("Планирование", "Planning") });
-    title.createEl("p", { text: this.planningYearOverview ? t("Годовой план доходов, расходов и переводов", "Annual income, expense, and transfer plan") : t("Доходы, расходы и переводы выбранного месяца", "Income, expenses, and transfers for the selected month") });
-    const actions = heading.createDiv({ cls: "oxf-planning-actions" });
-    const yearControl = actions.createDiv({ cls: "oxf-year-control" });
-    const previous = yearControl.createEl("button", { attr: { type: "button", "aria-label": this.planningYearOverview ? t("Предыдущий год", "Previous year") : t("Предыдущий месяц", "Previous month") } });
-    setIcon(previous, "chevron-left");
-    previous.addEventListener("click", () => this.shiftPlanningMonth(-1));
-    const selectedPeriod = this.planningYearOverview ? String(this.planningYear) : capitalize(new Intl.DateTimeFormat(localeCode(), { month: "long", year: "numeric" }).format(new Date(this.planningYear, this.planningMonth, 1)));
-    yearControl.createEl("strong", { text: selectedPeriod });
-    const next = yearControl.createEl("button", { attr: { type: "button", "aria-label": this.planningYearOverview ? t("Следующий год", "Next year") : t("Следующий месяц", "Next month") } });
-    setIcon(next, "chevron-right");
-    next.addEventListener("click", () => this.shiftPlanningMonth(1));
-    const monthPicker = yearControl.createEl("button", { cls: "oxf-month-picker-trigger", attr: { type: "button", "aria-label": t("Выбрать месяц", "Choose month"), "aria-expanded": String(this.planningMonthPickerOpen) } });
-    setIcon(monthPicker, "calendar-days");
-    monthPicker.addEventListener("click", () => { this.planningMonthPickerOpen = !this.planningMonthPickerOpen; this.render(); });
-    if (this.planningMonthPickerOpen) this.renderPlanningMonthPicker(actions);
-    const yearOverview = actions.createEl("button", { cls: this.planningYearOverview ? "is-active" : "", text: this.planningYearOverview ? t("Месяц", "Month") : t("Год", "Year"), attr: { type: "button" } });
-    yearOverview.addEventListener("click", () => {
-      this.planningYearOverview = !this.planningYearOverview;
-      this.planningMonthPickerOpen = false;
-      this.render();
-    });
-    actions.createEl("button", { cls: "mod-cta", text: t("+ Запланировать", "+ Plan"), attr: { type: "button" } })
-      .addEventListener("click", (event) => this.showPlanningCreateMenu(event));
-
     const actualYearIncome = index.transactions.filter((item) => inSelectedYear(item.date) && item.kind === "income").reduce((sum, item) => sum + item.amount, 0);
     const actualYearExpenses = index.transactions.filter((item) => inSelectedYear(item.date) && item.kind === "expense").reduce((sum, item) => sum + item.amount, 0);
     this.renderPlanningOverview(container, budget, this.planningYearOverview ? undefined : monthSummary, this.planningYearOverview ? { income: actualYearIncome, expenses: actualYearExpenses } : undefined);
@@ -473,14 +500,178 @@ export class FinanceView extends ItemView {
       this.renderPlanningHeatmap(container, yearPlans, yearIncomePlans, yearTransfers);
       return;
     }
-    const tabs = container.createDiv({ cls: "oxf-planning-tabs" });
-    for (const [value, label] of [["expenses", t("Расходы", "Expenses")], ["timeline", t("События", "Timeline")]] as const) {
+    const listToolbar = container.createDiv({ cls: "oxf-planning-list-toolbar" });
+    const tabs = listToolbar.createDiv({ cls: "oxf-planning-tabs" });
+    for (const [value, label] of [
+      ["expenses", t("Расходы", "Expenses")],
+      ["transfers", t("Переводы", "Transfers")],
+      ["income", t("По доходам", "By income")],
+    ] as const) {
       const tab = tabs.createEl("button", { cls: this.planningPanel === value ? "is-active" : "", text: label, attr: { type: "button" } });
       tab.addEventListener("click", () => { this.planningPanel = value; this.render(); });
     }
     const workspace = container.createDiv({ cls: "oxf-month-planner" });
-    if (this.planningPanel === "expenses") this.renderMonthlyExpenses(workspace, monthPlans);
-    else this.renderPlanningTimeline(workspace, monthPlans, monthIncomePlans, monthTransfers);
+    const renderActivePanel = (): void => {
+      workspace.empty();
+      if (this.planningPanel === "expenses") {
+        const filtered = this.filterExpensePlans(monthPlans);
+        this.renderMonthlyExpenses(workspace, filtered, filtered.length !== monthPlans.length);
+      } else if (this.planningPanel === "transfers") {
+        const filtered = this.filterPlannedTransfers(monthTransfers);
+        this.renderMonthlyTransfers(workspace, filtered, filtered.length !== monthTransfers.length);
+      } else {
+        this.renderIncomeAllocation(workspace, monthIncomePlans, monthPlans, monthTransfers);
+      }
+    };
+    if (this.planningPanel === "expenses" || this.planningPanel === "transfers") {
+      this.renderPlanningListFilters(listToolbar, monthPlans, monthTransfers, renderActivePanel);
+    }
+    renderActivePanel();
+  }
+
+  private renderPlanningListFilters(
+    container: HTMLElement,
+    expenses: ExpensePlan[],
+    transfers: PlannedTransfer[],
+    refresh: () => void,
+  ): void {
+    const filters = container.createDiv({ cls: "oxf-planning-list-filters" });
+    const isExpenses = this.planningPanel === "expenses";
+    const searchBox = filters.createDiv({ cls: "oxf-planning-filter-search" });
+    const searchIcon = searchBox.createSpan();
+    setIcon(searchIcon, "search");
+    const query = searchBox.createEl("input", {
+      attr: {
+        type: "search",
+        value: isExpenses ? this.expenseFilterQuery : this.transferFilterQuery,
+        placeholder: t("Поиск", "Search"),
+        "aria-label": t("Поиск по планам", "Search plans"),
+      },
+    });
+    query.addEventListener("input", () => {
+      if (isExpenses) this.expenseFilterQuery = query.value;
+      else this.transferFilterQuery = query.value;
+      updateResetState();
+      refresh();
+    });
+
+    const groupOptions: Array<{ value: string; label: string }> = [{ value: "", label: isExpenses ? t("Все категории", "All categories") : t("Все счета", "All accounts") }];
+    if (isExpenses) {
+      for (const category of [...new Set(expenses.map((plan) => plan.category))].sort((left, right) => left.localeCompare(right, localeCode()))) {
+        groupOptions.push({ value: category, label: category });
+      }
+    } else {
+      const accountNames = new Map(this.store.getIndex().accounts.map((account) => [account.id, account.name]));
+      const ids = [...new Set(transfers.map((plan) => plan.fromAccountId))]
+        .sort((left, right) => (accountNames.get(left) ?? left).localeCompare(accountNames.get(right) ?? right, localeCode()));
+      for (const id of ids) groupOptions.push({ value: id, label: accountNames.get(id) ?? t("Неизвестный счёт", "Unknown account") });
+    }
+    this.createPlanningFilterMenu(
+      filters,
+      groupOptions,
+      isExpenses ? this.expenseFilterCategory : this.transferFilterAccountId,
+      isExpenses ? t("Категория", "Category") : t("Исходный счёт", "Source account"),
+      (value) => {
+        if (isExpenses) this.expenseFilterCategory = value;
+        else this.transferFilterAccountId = value;
+        updateResetState();
+        refresh();
+      },
+    );
+
+    const statusOptions = [
+      { value: "all", label: t("Все статусы", "All statuses") },
+      { value: "planned", label: t("Предстоит", "Upcoming") },
+      { value: "paid", label: t("Выполнено", "Completed") },
+    ];
+    this.createPlanningFilterMenu(
+      filters,
+      statusOptions,
+      isExpenses ? this.expenseFilterStatus : this.transferFilterStatus,
+      t("Статус", "Status"),
+      (value) => {
+        const status = value as "all" | "planned" | "paid";
+        if (isExpenses) this.expenseFilterStatus = status;
+        else this.transferFilterStatus = status;
+        updateResetState();
+        refresh();
+      },
+    );
+
+    const reset = filters.createEl("button", {
+      cls: "oxf-planning-filter-reset",
+      attr: { type: "button", "aria-label": t("Сбросить фильтр", "Reset filter") },
+    });
+    setIcon(reset, "x");
+    const updateResetState = (): void => {
+      const hasFilter = isExpenses
+        ? Boolean(this.expenseFilterQuery || this.expenseFilterCategory || this.expenseFilterStatus !== "all")
+        : Boolean(this.transferFilterQuery || this.transferFilterAccountId || this.transferFilterStatus !== "all");
+      reset.toggleClass("is-visible", hasFilter);
+      reset.disabled = !hasFilter;
+    };
+    updateResetState();
+    reset.addEventListener("click", () => {
+      if (isExpenses) {
+        this.expenseFilterQuery = "";
+        this.expenseFilterCategory = "";
+        this.expenseFilterStatus = "all";
+      } else {
+        this.transferFilterQuery = "";
+        this.transferFilterAccountId = "";
+        this.transferFilterStatus = "all";
+      }
+      this.render();
+    });
+  }
+
+  private createPlanningFilterMenu(
+    container: HTMLElement,
+    options: Array<{ value: string; label: string }>,
+    selectedValue: string,
+    ariaLabel: string,
+    onSelect: (value: string) => void,
+  ): HTMLButtonElement {
+    const selected = options.find((option) => option.value === selectedValue) ?? options[0];
+    const button = container.createEl("button", {
+      cls: "oxf-planning-filter-menu",
+      attr: { type: "button", "aria-label": ariaLabel, "aria-haspopup": "menu" },
+    });
+    const label = button.createSpan({ text: selected?.label ?? "" });
+    const chevron = button.createSpan();
+    setIcon(chevron, "chevron-down");
+    button.addEventListener("click", (event) => {
+      const menu = new Menu();
+      for (const option of options) {
+        menu.addItem((item) => item
+          .setTitle(option.label)
+          .setChecked(option.value === selectedValue)
+          .onClick(() => {
+            selectedValue = option.value;
+            label.setText(option.label);
+            onSelect(option.value);
+          }));
+      }
+      menu.showAtMouseEvent(event);
+    });
+    return button;
+  }
+
+  private filterExpensePlans(plans: ExpensePlan[]): ExpensePlan[] {
+    const query = this.expenseFilterQuery.trim().toLocaleLowerCase(localeCode());
+    return plans.filter((plan) =>
+      (!query || `${plan.title} ${plan.category}`.toLocaleLowerCase(localeCode()).includes(query))
+      && (!this.expenseFilterCategory || plan.category === this.expenseFilterCategory)
+      && (this.expenseFilterStatus === "all" || plan.status === this.expenseFilterStatus));
+  }
+
+  private filterPlannedTransfers(plans: PlannedTransfer[]): PlannedTransfer[] {
+    const query = this.transferFilterQuery.trim().toLocaleLowerCase(localeCode());
+    const accountNames = new Map(this.store.getIndex().accounts.map((account) => [account.id, account.name]));
+    return plans.filter((plan) =>
+      (!query || `${accountNames.get(plan.fromAccountId) ?? ""} ${accountNames.get(plan.toAccountId) ?? ""}`.toLocaleLowerCase(localeCode()).includes(query))
+      && (!this.transferFilterAccountId || plan.fromAccountId === this.transferFilterAccountId)
+      && (this.transferFilterStatus === "all" || plan.status === this.transferFilterStatus));
   }
 
   private shiftPlanningMonth(delta: number): void {
@@ -549,7 +740,7 @@ export class FinanceView extends ItemView {
     }
   }
 
-  private renderMonthlyExpenses(container: HTMLElement, plans: ExpensePlan[]): void {
+  private renderMonthlyExpenses(container: HTMLElement, plans: ExpensePlan[], isFiltered = false): void {
     const card = container.createDiv({ cls: "oxf-card oxf-month-expenses" });
     const heading = card.createDiv({ cls: "oxf-month-planner-heading" });
     const headingText = heading.createDiv();
@@ -559,19 +750,28 @@ export class FinanceView extends ItemView {
     setIcon(add, "plus");
     add.addEventListener("click", () => this.actions.createPlan(undefined, new Date(this.planningYear, this.planningMonth, 1, 12)));
     if (plans.length === 0) {
-      card.createEl("p", { cls: "oxf-month-planner-empty", text: t("На этот месяц расходов пока нет.", "There are no expenses planned for this month.") });
+      card.createEl("p", { cls: "oxf-month-planner-empty", text: isFiltered ? t("По фильтру ничего не найдено.", "No matching plans found.") : t("На этот месяц расходов пока нет.", "There are no expenses planned for this month.") });
       return;
     }
     const grouped = new Map<string, ExpensePlan[]>();
     for (const plan of plans) grouped.set(plan.category, [...(grouped.get(plan.category) ?? []), plan]);
     const categories = card.createDiv({ cls: "oxf-month-expense-groups" });
     for (const [category, categoryPlans] of [...grouped.entries()].sort(([left], [right]) => left.localeCompare(right, localeCode()))) {
-      const group = categories.createEl("section", { cls: "oxf-month-expense-group" });
-      const groupHeading = group.createDiv({ cls: "oxf-month-expense-group-heading" });
+      const isCollapsed = this.collapsedExpenseGroups.has(category);
+      const group = categories.createEl("section", { cls: `oxf-month-expense-group${isCollapsed ? "" : " is-open"}` });
+      const groupHeading = group.createEl("button", { cls: "oxf-month-expense-group-heading", attr: { type: "button", "aria-expanded": String(!isCollapsed) } });
+      const chevron = groupHeading.createSpan({ cls: "oxf-month-expense-group-chevron" });
+      setIcon(chevron, "chevron-right");
       const identity = groupHeading.createDiv();
       identity.createEl("strong", { text: category });
       identity.createSpan({ text: t(`${categoryPlans.length} платежей`, `${categoryPlans.length} payments`) });
       groupHeading.createEl("b", { text: `${money(categoryPlans.reduce((sum, plan) => sum + plan.amount, 0))} ₽` });
+      groupHeading.addEventListener("click", () => {
+        if (isCollapsed) this.collapsedExpenseGroups.delete(category);
+        else this.collapsedExpenseGroups.add(category);
+        this.render();
+      });
+      if (isCollapsed) continue;
       for (const plan of categoryPlans.sort((left, right) => left.dueDate.getTime() - right.dueDate.getTime())) {
         const row = group.createDiv({ cls: `oxf-month-plan-row${plan.status === "paid" ? " is-paid" : ""}` });
         const check = row.createEl("button", { attr: { type: "button", "aria-label": plan.status === "paid" ? t("Выполнено", "Completed") : t("Выполнить", "Complete") } });
@@ -589,48 +789,259 @@ export class FinanceView extends ItemView {
     }
   }
 
-  private renderPlanningTimeline(container: HTMLElement, expenses: ExpensePlan[], incomes: IncomePlan[], transfers: PlannedTransfer[]): void {
-    const card = container.createDiv({ cls: "oxf-card oxf-planning-timeline" });
+  private renderMonthlyTransfers(container: HTMLElement, plans: PlannedTransfer[], isFiltered = false): void {
+    const card = container.createDiv({ cls: "oxf-card oxf-month-expenses" });
     const heading = card.createDiv({ cls: "oxf-month-planner-heading" });
     const headingText = heading.createDiv();
-    headingText.createEl("strong", { text: t("События месяца", "Monthly timeline") });
-    headingText.createSpan({ text: t("Доходы, расходы и переводы по датам", "Income, expenses, and transfers by date") });
-    type TimelineItem = { kind: "expense" | "income" | "transfer"; date: Date; title: string; meta: string; amount: number; paid: boolean; complete: () => void; edit: () => void; remove: () => void };
-    const accounts = new Map(this.store.getIndex().accounts.map((account) => [account.id, account.name]));
-    const items: TimelineItem[] = [
-      ...expenses.map((plan): TimelineItem => ({ kind: "expense", date: plan.dueDate, title: plan.title, meta: plan.category, amount: plan.amount, paid: plan.status === "paid", complete: () => this.actions.completePlan(plan), edit: () => this.actions.editPlan(plan), remove: () => this.actions.deletePlan(plan) })),
-      ...incomes.map((plan): TimelineItem => ({ kind: "income", date: plan.dueDate, title: plan.title, meta: plan.category, amount: plan.amount, paid: plan.status === "paid", complete: () => this.actions.completeIncomePlan(plan), edit: () => this.actions.editIncomePlan(plan), remove: () => this.actions.deleteIncomePlan(plan) })),
-      ...transfers.map((plan): TimelineItem => ({ kind: "transfer", date: plan.dueDate, title: `${accounts.get(plan.fromAccountId) ?? t("Неизвестный счёт", "Unknown account")} → ${accounts.get(plan.toAccountId) ?? t("Неизвестный счёт", "Unknown account")}`, meta: t("Перевод", "Transfer"), amount: plan.amount, paid: plan.status === "paid", complete: () => this.actions.completePlannedTransfer(plan), edit: () => this.actions.editPlannedTransfer(plan), remove: () => this.actions.deletePlannedTransfer(plan) })),
-    ].sort((left, right) => left.date.getTime() - right.date.getTime());
-    if (items.length === 0) {
-      card.createEl("p", { cls: "oxf-month-planner-empty", text: t("На этот месяц событий пока нет.", "There are no events planned for this month.") });
+    headingText.createEl("strong", { text: t("Переводы месяца", "Monthly transfers") });
+    headingText.createSpan({ text: t(`${plans.length} переводов · ${money(plans.reduce((sum, plan) => sum + plan.amount, 0))} ₽`, `${plans.length} transfers · ${money(plans.reduce((sum, plan) => sum + plan.amount, 0))} ₽`) });
+    const add = heading.createEl("button", { attr: { type: "button", "aria-label": t("Добавить перевод", "Add transfer") } });
+    setIcon(add, "plus");
+    add.addEventListener("click", () => this.actions.createPlannedTransfer(new Date(this.planningYear, this.planningMonth, 1, 12)));
+    if (plans.length === 0) {
+      card.createEl("p", { cls: "oxf-month-planner-empty", text: isFiltered ? t("По фильтру ничего не найдено.", "No matching plans found.") : t("На этот месяц переводов пока нет.", "There are no transfers planned for this month.") });
       return;
     }
-    const list = card.createDiv({ cls: "oxf-planning-timeline-list" });
-    for (const item of items) {
-      const row = list.createDiv({ cls: `oxf-planning-timeline-row is-${item.kind}${item.paid ? " is-paid" : ""}` });
-      const date = row.createDiv({ cls: "oxf-planning-timeline-date" });
-      date.createEl("strong", { text: String(item.date.getDate()) });
-      date.createSpan({ text: new Intl.DateTimeFormat(localeCode(), { month: "short" }).format(item.date).replace(".", "") });
-      const marker = row.createSpan({ cls: "oxf-planning-timeline-marker" });
-      setIcon(marker, item.kind === "income" ? "circle-plus" : item.kind === "transfer" ? "arrow-left-right" : "receipt-text");
-      const text = row.createDiv({ cls: "oxf-planning-timeline-text" });
-      text.createEl("strong", { text: item.title });
-      text.createSpan({ text: item.meta });
-      row.createEl("b", { text: `${item.kind === "income" ? "+" : item.kind === "expense" ? "−" : ""}${money(item.amount)} ₽` });
-      const complete = row.createEl("button", { attr: { type: "button", "aria-label": item.paid ? t("Выполнено", "Completed") : t("Выполнить", "Complete") } });
-      setIcon(complete, item.paid ? "circle-check-big" : "circle");
-      complete.disabled = item.paid;
-      if (!item.paid) complete.addEventListener("click", item.complete);
-      const more = row.createEl("button", { attr: { type: "button", "aria-label": t("Действия", "Actions") } });
-      setIcon(more, "ellipsis");
-      more.addEventListener("click", (event) => {
-        const menu = new Menu();
-        menu.addItem((menuItem) => menuItem.setTitle(t("Изменить", "Edit")).setIcon("pencil").onClick(item.edit));
-        menu.addItem((menuItem) => menuItem.setTitle(t("Удалить", "Delete")).setIcon("trash-2").onClick(item.remove));
-        menu.showAtMouseEvent(event);
+    const accountNames = new Map(this.store.getIndex().accounts.map((account) => [account.id, account.name]));
+    const unknownAccount = t("Неизвестный счёт", "Unknown account");
+    const grouped = new Map<string, PlannedTransfer[]>();
+    for (const plan of plans) grouped.set(plan.fromAccountId, [...(grouped.get(plan.fromAccountId) ?? []), plan]);
+    const groups = card.createDiv({ cls: "oxf-month-expense-groups" });
+    for (const [accountId, accountPlans] of [...grouped.entries()].sort(([left], [right]) =>
+      (accountNames.get(left) ?? unknownAccount).localeCompare(accountNames.get(right) ?? unknownAccount, localeCode()))) {
+      const isCollapsed = this.collapsedTransferGroups.has(accountId);
+      const group = groups.createEl("section", { cls: `oxf-month-expense-group${isCollapsed ? "" : " is-open"}` });
+      const groupHeading = group.createEl("button", { cls: "oxf-month-expense-group-heading", attr: { type: "button", "aria-expanded": String(!isCollapsed) } });
+      const chevron = groupHeading.createSpan({ cls: "oxf-month-expense-group-chevron" });
+      setIcon(chevron, "chevron-right");
+      const identity = groupHeading.createDiv();
+      identity.createEl("strong", { text: accountNames.get(accountId) ?? unknownAccount });
+      identity.createSpan({ text: t(`${accountPlans.length} переводов`, `${accountPlans.length} transfers`) });
+      groupHeading.createEl("b", { text: `${money(accountPlans.reduce((sum, plan) => sum + plan.amount, 0))} ₽` });
+      groupHeading.addEventListener("click", () => {
+        if (isCollapsed) this.collapsedTransferGroups.delete(accountId);
+        else this.collapsedTransferGroups.add(accountId);
+        this.render();
       });
+      if (isCollapsed) continue;
+      for (const plan of accountPlans.sort((left, right) => left.dueDate.getTime() - right.dueDate.getTime())) {
+        const row = group.createDiv({ cls: `oxf-month-plan-row is-transfer${plan.status === "paid" ? " is-paid" : ""}` });
+        const check = row.createEl("button", { attr: { type: "button", "aria-label": plan.status === "paid" ? t("Выполнено", "Completed") : t("Выполнить", "Complete") } });
+        setIcon(check, plan.status === "paid" ? "circle-check-big" : "circle");
+        check.disabled = plan.status === "paid";
+        if (plan.status === "planned") check.addEventListener("click", () => this.actions.completePlannedTransfer(plan));
+        const text = row.createDiv();
+        text.createEl("strong", { text: `${accountNames.get(plan.fromAccountId) ?? unknownAccount} → ${accountNames.get(plan.toAccountId) ?? unknownAccount}` });
+        text.createSpan({ text: new Intl.DateTimeFormat(localeCode(), { day: "numeric", month: "long" }).format(plan.dueDate) });
+        row.createEl("b", { text: `${money(plan.amount)} ₽` });
+        const more = row.createEl("button", { attr: { type: "button", "aria-label": t("Действия с переводом", "Transfer actions") } });
+        setIcon(more, "ellipsis");
+        more.addEventListener("click", (event) => {
+          const menu = new Menu();
+          menu.addItem((item) => item.setTitle(t("Изменить", "Edit")).setIcon("pencil").onClick(() => this.actions.editPlannedTransfer(plan)));
+          menu.addItem((item) => item.setTitle(t("Удалить", "Delete")).setIcon("trash-2").onClick(() => this.actions.deletePlannedTransfer(plan)));
+          menu.showAtMouseEvent(event);
+        });
+      }
     }
+  }
+
+  private renderIncomeAllocation(container: HTMLElement, incomes: IncomePlan[], expenses: ExpensePlan[], transfers: PlannedTransfer[]): void {
+    const card = container.createDiv({ cls: "oxf-card oxf-income-allocation" });
+    const assignedIncomeIds = new Set(incomes.map((income) => income.id));
+    const unassignedExpenses = expenses.filter((plan) => !plan.fundedByIncomePlanId || !assignedIncomeIds.has(plan.fundedByIncomePlanId));
+    const unassignedTransfers = transfers.filter((plan) => !plan.fundedByIncomePlanId || !assignedIncomeIds.has(plan.fundedByIncomePlanId));
+    const allocated = expenses.filter((plan) => plan.fundedByIncomePlanId && assignedIncomeIds.has(plan.fundedByIncomePlanId)).reduce((sum, plan) => sum + plan.amount, 0)
+      + transfers.filter((plan) => plan.fundedByIncomePlanId && assignedIncomeIds.has(plan.fundedByIncomePlanId)).reduce((sum, plan) => sum + plan.amount, 0);
+    const incomeTotal = incomes.reduce((sum, income) => sum + income.amount, 0);
+    const period = `${this.planningYear}-${this.planningMonth}`;
+    if (this.incomeAllocationPeriod !== period) {
+      this.incomeAllocationPeriod = period;
+      this.expandedIncomeAllocations.clear();
+      if (incomes[0]) this.expandedIncomeAllocations.add(incomes[0].id);
+      this.unassignedAllocationOpen = true;
+    }
+    const heading = card.createDiv({ cls: "oxf-month-planner-heading" });
+    const headingText = heading.createDiv();
+    headingText.createEl("strong", { text: t("Распределение доходов", "Income allocation") });
+    headingText.createSpan({ text: `${t("Нераспределено", "Unallocated")}: ${money(incomeTotal - allocated)} ₽` });
+    if (incomes.length === 0) {
+      card.createEl("p", { cls: "oxf-month-planner-empty", text: t("Сначала запланируйте доход на этот месяц.", "Plan an income for this month first.") });
+      return;
+    }
+    const groups = card.createDiv({ cls: "oxf-income-allocation-groups" });
+    for (const income of [...incomes].sort((left, right) => left.dueDate.getTime() - right.dueDate.getTime())) {
+      const incomeExpenses = expenses.filter((plan) => plan.fundedByIncomePlanId === income.id);
+      const incomeTransfers = transfers.filter((plan) => plan.fundedByIncomePlanId === income.id);
+      this.renderIncomeAllocationGroup(groups, income, incomeExpenses, incomeTransfers, incomes);
+    }
+    if (unassignedExpenses.length > 0 || unassignedTransfers.length > 0) {
+      this.renderUnassignedFundingGroup(groups, unassignedExpenses, unassignedTransfers, incomes);
+    }
+  }
+
+  private renderIncomeAllocationGroup(container: HTMLElement, income: IncomePlan, expenses: ExpensePlan[], transfers: PlannedTransfer[], incomes: IncomePlan[]): void {
+    const allocation = calculateIncomeAllocation(income.amount, expenses, transfers);
+    const isOpen = this.expandedIncomeAllocations.has(income.id);
+    const group = container.createEl("section", { cls: `oxf-income-allocation-group${isOpen ? " is-open" : ""}${allocation.overallocated ? " is-overallocated" : ""}${income.status === "paid" ? " is-paid" : ""}` });
+    this.registerFundingDropTarget(group, income.id, expenses, transfers);
+    const heading = group.createDiv({ cls: "oxf-income-allocation-heading", attr: { role: "button", tabindex: "0", "aria-expanded": String(isOpen) } });
+    const chevron = heading.createSpan({ cls: "oxf-income-allocation-chevron" });
+    setIcon(chevron, "chevron-right");
+    const identity = heading.createDiv({ cls: "oxf-income-allocation-identity" });
+    identity.createEl("strong", { text: income.title });
+    identity.createSpan({ text: `${new Intl.DateTimeFormat(localeCode(), { day: "numeric", month: "long" }).format(income.dueDate)} · ${income.category}` });
+    const totals = heading.createDiv({ cls: "oxf-income-allocation-totals" });
+    totals.createEl("b", { text: `${money(income.amount)} ₽` });
+    totals.createSpan({ text: `${t("Нераспределено", "Unallocated")}: ${money(allocation.unallocated)} ₽` });
+    const actions = heading.createDiv({ cls: "oxf-income-allocation-actions" });
+    const complete = actions.createEl("button", { attr: { type: "button", "aria-label": income.status === "paid" ? t("Доход получен", "Income received") : t("Отметить доход полученным", "Mark income as received") } });
+    setIcon(complete, income.status === "paid" ? "circle-check-big" : "circle");
+    complete.disabled = income.status === "paid";
+    if (income.status === "planned") complete.addEventListener("click", () => this.actions.completeIncomePlan(income));
+    const add = actions.createEl("button", { attr: { type: "button", "aria-label": t("Добавить план к доходу", "Add plan to income") } });
+    setIcon(add, "plus");
+    add.addEventListener("click", (event) => {
+      const menu = new Menu();
+      menu.addItem((item) => item.setTitle(t("Добавить расход", "Add expense")).setIcon("receipt-text").onClick(() => this.actions.createPlan(undefined, income.dueDate, income.id)));
+      menu.addItem((item) => item.setTitle(t("Добавить перевод", "Add transfer")).setIcon("arrow-left-right").onClick(() => this.actions.createPlannedTransfer(income.dueDate, income.id)));
+      menu.showAtMouseEvent(event);
+    });
+    const more = actions.createEl("button", { attr: { type: "button", "aria-label": t("Действия с доходом", "Income actions") } });
+    setIcon(more, "ellipsis");
+    more.addEventListener("click", (event) => {
+      const menu = new Menu();
+      menu.addItem((item) => item.setTitle(t("Изменить", "Edit")).setIcon("pencil").onClick(() => this.actions.editIncomePlan(income)));
+      menu.addItem((item) => item.setTitle(t("Удалить", "Delete")).setIcon("trash-2").onClick(() => this.actions.deleteIncomePlan(income)));
+      menu.showAtMouseEvent(event);
+    });
+    const toggle = (): void => {
+      if (isOpen) this.expandedIncomeAllocations.delete(income.id);
+      else this.expandedIncomeAllocations.add(income.id);
+      this.render();
+    };
+    heading.addEventListener("click", (event) => { if (!(event.target as HTMLElement).closest("button")) toggle(); });
+    heading.addEventListener("keydown", (event) => {
+      if ((event.key === "Enter" || event.key === " ") && !(event.target as HTMLElement).closest("button")) {
+        event.preventDefault();
+        toggle();
+      }
+    });
+    if (!isOpen) return;
+    const list = group.createDiv({ cls: "oxf-income-allocation-list" });
+    if (expenses.length === 0 && transfers.length === 0) {
+      list.createEl("p", { cls: "oxf-income-allocation-empty", text: t("Перетащите сюда расход или перевод", "Drag an expense or transfer here") });
+      return;
+    }
+    for (const plan of [...expenses].sort((left, right) => left.dueDate.getTime() - right.dueDate.getTime())) this.renderFundingExpenseRow(list, plan, incomes);
+    for (const plan of [...transfers].sort((left, right) => left.dueDate.getTime() - right.dueDate.getTime())) this.renderFundingTransferRow(list, plan, incomes);
+  }
+
+  private renderUnassignedFundingGroup(container: HTMLElement, expenses: ExpensePlan[], transfers: PlannedTransfer[], incomes: IncomePlan[]): void {
+    const group = container.createEl("section", { cls: `oxf-income-allocation-group is-unassigned${this.unassignedAllocationOpen ? " is-open" : ""}` });
+    this.registerFundingDropTarget(group, undefined, expenses, transfers);
+    const heading = group.createDiv({ cls: "oxf-income-allocation-heading", attr: { role: "button", tabindex: "0", "aria-expanded": String(this.unassignedAllocationOpen) } });
+    const chevron = heading.createSpan({ cls: "oxf-income-allocation-chevron" });
+    setIcon(chevron, "chevron-right");
+    const identity = heading.createDiv({ cls: "oxf-income-allocation-identity" });
+    identity.createEl("strong", { text: t("Нераспределённые планы", "Unallocated plans") });
+    identity.createSpan({ text: t(`${expenses.length} расходов · ${transfers.length} переводов`, `${expenses.length} expenses · ${transfers.length} transfers`) });
+    const total = [...expenses, ...transfers].reduce((sum, plan) => sum + plan.amount, 0);
+    const totals = heading.createDiv({ cls: "oxf-income-allocation-totals" });
+    totals.createEl("b", { text: `${money(total)} ₽` });
+    const toggle = (): void => { this.unassignedAllocationOpen = !this.unassignedAllocationOpen; this.render(); };
+    heading.addEventListener("click", toggle);
+    heading.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") { event.preventDefault(); toggle(); }
+    });
+    if (!this.unassignedAllocationOpen) return;
+    const list = group.createDiv({ cls: "oxf-income-allocation-list" });
+    for (const plan of expenses) this.renderFundingExpenseRow(list, plan, incomes);
+    for (const plan of transfers) this.renderFundingTransferRow(list, plan, incomes);
+  }
+
+  private renderFundingExpenseRow(container: HTMLElement, plan: ExpensePlan, incomes: IncomePlan[]): void {
+    const row = container.createDiv({ cls: `oxf-income-allocation-row is-expense${plan.status === "paid" ? " is-paid" : ""}` });
+    this.makeFundingRowDraggable(row, "expense", plan.id);
+    const marker = row.createSpan({ cls: "oxf-income-allocation-marker" });
+    setIcon(marker, "receipt-text");
+    const text = row.createDiv();
+    text.createEl("strong", { text: plan.title });
+    text.createSpan({ text: `${plan.category} · ${new Intl.DateTimeFormat(localeCode(), { day: "numeric", month: "short" }).format(plan.dueDate).replace(".", "")}` });
+    row.createEl("b", { text: `${money(plan.amount)} ₽` });
+    const more = row.createEl("button", { attr: { type: "button", "aria-label": t("Действия с расходом", "Expense actions") } });
+    setIcon(more, "ellipsis");
+    more.addEventListener("click", (event) => this.showFundingMenu(event, "expense", plan, incomes));
+  }
+
+  private renderFundingTransferRow(container: HTMLElement, plan: PlannedTransfer, incomes: IncomePlan[]): void {
+    const accounts = new Map(this.store.getIndex().accounts.map((account) => [account.id, account.name]));
+    const unknown = t("Неизвестный счёт", "Unknown account");
+    const row = container.createDiv({ cls: `oxf-income-allocation-row is-transfer${plan.status === "paid" ? " is-paid" : ""}` });
+    this.makeFundingRowDraggable(row, "transfer", plan.id);
+    const marker = row.createSpan({ cls: "oxf-income-allocation-marker" });
+    setIcon(marker, "arrow-left-right");
+    const text = row.createDiv();
+    text.createEl("strong", { text: `${accounts.get(plan.fromAccountId) ?? unknown} → ${accounts.get(plan.toAccountId) ?? unknown}` });
+    text.createSpan({ text: new Intl.DateTimeFormat(localeCode(), { day: "numeric", month: "short" }).format(plan.dueDate).replace(".", "") });
+    row.createEl("b", { text: `${money(plan.amount)} ₽` });
+    const more = row.createEl("button", { attr: { type: "button", "aria-label": t("Действия с переводом", "Transfer actions") } });
+    setIcon(more, "ellipsis");
+    more.addEventListener("click", (event) => this.showFundingMenu(event, "transfer", plan, incomes));
+  }
+
+  private makeFundingRowDraggable(row: HTMLElement, kind: "expense" | "transfer", id: string): void {
+    row.draggable = true;
+    row.addEventListener("dragstart", (event) => {
+      this.draggedFundingItem = { kind, id };
+      if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+      row.addClass("is-dragging");
+    });
+    row.addEventListener("dragend", () => { this.draggedFundingItem = undefined; row.removeClass("is-dragging"); });
+  }
+
+  private registerFundingDropTarget(target: HTMLElement, incomePlanId: string | undefined, expenses: ExpensePlan[], transfers: PlannedTransfer[]): void {
+    target.addEventListener("dragover", (event) => { event.preventDefault(); target.addClass("is-drop-target"); });
+    target.addEventListener("dragleave", (event) => { if (!target.contains(event.relatedTarget as Node | null)) target.removeClass("is-drop-target"); });
+    target.addEventListener("drop", (event) => {
+      event.preventDefault();
+      target.removeClass("is-drop-target");
+      const dragged = this.draggedFundingItem;
+      this.draggedFundingItem = undefined;
+      if (!dragged) return;
+      if (dragged.kind === "expense") {
+        const plan = this.store.getIndex().plans.find((item) => item.id === dragged.id) ?? expenses.find((item) => item.id === dragged.id);
+        if (plan) this.actions.setExpensePlanFunding(plan, incomePlanId);
+      } else {
+        const plan = this.store.getIndex().plannedTransfers.find((item) => item.id === dragged.id) ?? transfers.find((item) => item.id === dragged.id);
+        if (plan) this.actions.setPlannedTransferFunding(plan, incomePlanId);
+      }
+    });
+  }
+
+  private showFundingMenu(event: MouseEvent, kind: "expense" | "transfer", plan: ExpensePlan | PlannedTransfer, incomes: IncomePlan[]): void {
+    const menu = new Menu();
+    for (const income of incomes) {
+      menu.addItem((item) => item.setTitle(`${t("Назначить", "Assign")}: ${income.title}`).setIcon("wallet-cards").onClick(() => {
+        if (kind === "expense") this.actions.setExpensePlanFunding(plan as ExpensePlan, income.id);
+        else this.actions.setPlannedTransferFunding(plan as PlannedTransfer, income.id);
+      }));
+    }
+    const fundedBy = plan.fundedByIncomePlanId;
+    if (fundedBy) menu.addItem((item) => item.setTitle(t("Убрать распределение", "Remove allocation")).setIcon("unlink").onClick(() => {
+      if (kind === "expense") this.actions.setExpensePlanFunding(plan as ExpensePlan);
+      else this.actions.setPlannedTransferFunding(plan as PlannedTransfer);
+    }));
+    menu.addSeparator();
+    menu.addItem((item) => item.setTitle(t("Изменить", "Edit")).setIcon("pencil").onClick(() => {
+      if (kind === "expense") this.actions.editPlan(plan as ExpensePlan);
+      else this.actions.editPlannedTransfer(plan as PlannedTransfer);
+    }));
+    menu.addItem((item) => item.setTitle(t("Удалить", "Delete")).setIcon("trash-2").onClick(() => {
+      if (kind === "expense") this.actions.deletePlan(plan as ExpensePlan);
+      else this.actions.deletePlannedTransfer(plan as PlannedTransfer);
+    }));
+    menu.showAtMouseEvent(event);
   }
 
   private showPlanningCreateMenu(event: MouseEvent): void {
@@ -648,25 +1059,6 @@ export class FinanceView extends ItemView {
     const split = splitDebtsByArchive(this.store.getIndex().debts);
     const debts = this.debtArchiveOpen ? split.archived : split.active;
     const { owedToMe, iOwe } = summarizeDebts(debts);
-    const heading = container.createDiv({ cls: "oxf-accounts-heading" });
-    const title = heading.createDiv();
-    title.createEl("h2", { text: t("Долги", "Debts") });
-    title.createEl("p", { text: this.debtArchiveOpen
-      ? t("Закрытые долги", "Closed debts")
-      : t("Личные долги и обязательства", "Personal debts and obligations") });
-    const headingActions = heading.createDiv({ cls: "oxf-debt-heading-actions" });
-    const archive = headingActions.createEl("button", {
-      cls: `oxf-debt-archive-toggle${this.debtArchiveOpen ? " is-active" : ""}`,
-      attr: {
-        type: "button",
-        "aria-label": this.debtArchiveOpen ? t("Вернуться к активным долгам", "Return to active debts") : t("Архив долгов", "Debt archive"),
-        title: this.debtArchiveOpen ? t("Активные долги", "Active debts") : t("Архив долгов", "Debt archive"),
-        "aria-pressed": String(this.debtArchiveOpen),
-      },
-    });
-    setIcon(archive, this.debtArchiveOpen ? "archive-restore" : "archive");
-    archive.addEventListener("click", () => { this.debtArchiveOpen = !this.debtArchiveOpen; this.render(); });
-    headingActions.createEl("button", { cls: "mod-cta", text: t("+ Добавить долг", "+ Add debt"), attr: { type: "button" } }).addEventListener("click", () => this.actions.createDebt());
     const summary = container.createDiv({ cls: "oxf-debt-summary" });
     this.renderPlanningMetric(summary, this.debtArchiveOpen ? t("Вернули мне", "Repaid to me") : t("Мне должны", "Owed to me"), `+${money(owedToMe)} ₽`);
     this.renderPlanningMetric(summary, this.debtArchiveOpen ? t("Вернул я", "Repaid by me") : t("Я должен", "I owe"), `−${money(iOwe)} ₽`);
@@ -692,10 +1084,31 @@ export class FinanceView extends ItemView {
         const person = identity.createEl("button", { cls: "oxf-debt-person", text: debt.name, attr: { type: "button" } });
         person.addEventListener("click", () => void this.app.workspace.openLinkText(debt.personPath ?? "", debt.file.path));
       } else identity.createEl("strong", { text: debt.name });
+      if (!this.debtArchiveOpen) {
+        const planning = summarizeDebtPlanning(debt, this.store.getIndex().plans, this.store.getIndex().incomePlans);
+        if (planning.plannedAmount > 0) {
+          const date = planning.nextDueDate
+            ? new Intl.DateTimeFormat(localeCode(), { day: "numeric", month: "short" }).format(planning.nextDueDate).replace(".", "")
+            : "";
+          identity.createSpan({ text: t(
+            `Запланировано ${money(planning.plannedAmount)} ₽${date ? ` · ${date}` : ""} · осталось ${money(planning.unplannedAmount)} ₽`,
+            `Planned ${money(planning.plannedAmount)} ₽${date ? ` · ${date}` : ""} · ${money(planning.unplannedAmount)} ₽ left`,
+          ) });
+        }
+      }
       row.createEl("strong", { cls: `oxf-debt-amount ${debt.amount > 0 ? "is-positive" : "is-negative"}`, text: `${debt.amount > 0 ? "+" : "−"}${money(Math.abs(debt.amount))} ₽` });
       const more = row.createEl("button", { cls: "oxf-account-more", attr: { type: "button", "aria-label": t("Действия с долгом", "Debt actions") } }); setIcon(more, "ellipsis");
       more.addEventListener("click", (event) => {
         const menu = new Menu();
+        if (!this.debtArchiveOpen) {
+          const planning = summarizeDebtPlanning(debt, this.store.getIndex().plans, this.store.getIndex().incomePlans);
+          menu.addItem((item) => item
+            .setTitle(debt.amount < 0 ? t("Запланировать погашение", "Plan repayment") : t("Запланировать получение", "Plan collection"))
+            .setIcon("calendar-plus")
+            .setDisabled(planning.unplannedAmount <= 0.005)
+            .onClick(() => this.actions.planDebtPayment(debt.amount < 0 ? "pay" : "receive", debt.id)));
+          menu.addSeparator();
+        }
         menu.addItem((item) => item
           .setTitle(this.debtArchiveOpen ? t("Вернуть в активные", "Restore to active") : t("Закрыть долг", "Close debt"))
           .setIcon(this.debtArchiveOpen ? "archive-restore" : "circle-check")
@@ -758,66 +1171,128 @@ export class FinanceView extends ItemView {
   }
 
   private renderAccountCard(container: HTMLElement, account: FinanceAccount, accounts: FinanceAccount[]): void {
-    const card = container.createEl("section", { cls: "oxf-account-row" });
+    const card = container.createEl("section", { cls: "oxf-card oxf-account-card", attr: { draggable: "true" } });
     card.dataset.accountId = account.id;
-    const dragHandle = card.createEl("button", {
-      cls: "oxf-account-drag-handle",
-      attr: { type: "button", draggable: "true", "aria-label": t(`Переместить счёт ${account.name}`, `Move account ${account.name}`) },
-    });
-    setIcon(dragHandle, "grip-vertical");
-    dragHandle.addEventListener("dragstart", (event) => {
+    const heading = card.createDiv({ cls: "oxf-account-card-heading" });
+    const icon = heading.createSpan({ cls: "oxf-account-icon" });
+    setIcon(icon, normalizeAccountIcon(account.icon));
+    card.addEventListener("dragstart", (event) => {
+      if ((event.target as HTMLElement).closest("button")) {
+        event.preventDefault();
+        return;
+      }
       this.draggedAccountId = account.id;
       card.addClass("is-dragging");
       event.dataTransfer?.setData("text/plain", account.id);
-      if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+      if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = "move";
+        const emptyDragImage = document.body.createDiv({ cls: "oxf-empty-drag-image" });
+        event.dataTransfer.setDragImage(emptyDragImage, 0, 0);
+        window.setTimeout(() => emptyDragImage.remove(), 0);
+      }
     });
-    dragHandle.addEventListener("dragend", () => {
+    card.addEventListener("dragend", () => {
+      const cancelled = this.draggedAccountId !== undefined;
       this.draggedAccountId = undefined;
       card.removeClass("is-dragging");
       this.clearAccountDropIndicators(container);
+      if (cancelled) this.render();
     });
-    card.addEventListener("dragover", (event) => {
-      if (!this.draggedAccountId || this.draggedAccountId === account.id) return;
-      event.preventDefault();
-      if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
-      this.clearAccountDropIndicators(container);
-      const after = event.clientY >= card.getBoundingClientRect().top + card.getBoundingClientRect().height / 2;
-      card.addClass(after ? "is-drop-after" : "is-drop-before");
-    });
-    card.addEventListener("drop", (event) => {
-      if (!this.draggedAccountId || this.draggedAccountId === account.id) return;
-      event.preventDefault();
-      const after = event.clientY >= card.getBoundingClientRect().top + card.getBoundingClientRect().height / 2;
-      const ids = accounts.map((item) => item.id).filter((id) => id !== this.draggedAccountId);
-      const targetIndex = ids.indexOf(account.id);
-      ids.splice(targetIndex + (after ? 1 : 0), 0, this.draggedAccountId);
-      this.draggedAccountId = undefined;
-      this.clearAccountDropIndicators(container);
-      void this.actions.reorderAccounts(ids);
-    });
-    const icon = card.createSpan({ cls: "oxf-account-icon" });
-    setIcon(icon, normalizeAccountIcon(account.icon));
-    const identity = card.createDiv({ cls: "oxf-account-identity" });
+    const identity = heading.createDiv({ cls: "oxf-account-identity" });
     identity.createEl("strong", { text: account.name });
-    identity.createSpan({ text: account.balance === 0 ? t("Нет средств", "No funds") : t("Доступно сейчас", "Available now") });
-    card.createEl("strong", { cls: `oxf-account-balance${account.balance < 0 ? " is-negative" : ""}`, text: `${money(account.balance)} ₽` });
-    const transfer = card.createEl("button", { cls: "oxf-account-transfer", text: t("Перевести", "Transfer"), attr: { type: "button" } });
+    identity.createSpan({ text: `${t("Доступно сейчас", "Available now")}: ${money(account.balance)} ₽` });
+    this.renderAccountCategoryChart(card, account.id);
+    const footer = card.createDiv({ cls: "oxf-account-card-footer" });
+    const transfer = footer.createEl("button", { cls: "oxf-account-transfer", text: t("Перевести", "Transfer"), attr: { type: "button" } });
     transfer.disabled = accounts.length < 2 || account.balance <= 0;
     transfer.addEventListener("click", () => this.actions.transfer(account.id));
-    const more = card.createEl("button", { cls: "oxf-account-more", text: "•••", attr: { type: "button", "aria-label": t(`Действия со счётом ${account.name}`, `Actions for account ${account.name}`) } });
+    const more = footer.createEl("button", { cls: "oxf-account-more", text: "•••", attr: { type: "button", "aria-label": t(`Действия со счётом ${account.name}`, `Actions for account ${account.name}`) } });
     more.addEventListener("click", (event) => this.showAccountMenu(event, account));
   }
 
   private clearAccountDropIndicators(container: HTMLElement): void {
-    for (const row of Array.from(container.querySelectorAll(".oxf-account-row"))) {
+    for (const row of Array.from(container.querySelectorAll(".oxf-account-card"))) {
       row.removeClass("is-drop-before", "is-drop-after");
     }
   }
 
+  private previewAccountOrder(container: HTMLElement, target: HTMLElement, event: DragEvent): void {
+    if (!this.draggedAccountId) return;
+    const cards = Array.from(container.querySelectorAll<HTMLElement>(".oxf-account-card"));
+    const dragged = cards.find((card) => card.dataset.accountId === this.draggedAccountId);
+    if (!dragged || dragged === target) return;
+    const targetRect = target.getBoundingClientRect();
+    const multiColumn = container.clientWidth >= targetRect.width * 1.75;
+    const before = multiColumn
+      ? event.clientX < targetRect.left + targetRect.width / 2
+      : event.clientY < targetRect.top + targetRect.height / 2;
+    const reference = before ? target : target.nextElementSibling;
+    if (reference === dragged || (!reference && dragged === container.lastElementChild)) return;
+    const positions = new Map(cards.map((card) => [card, card.getBoundingClientRect()]));
+    container.insertBefore(dragged, reference);
+    for (const card of cards) {
+      if (card === dragged) continue;
+      const previous = positions.get(card);
+      if (!previous) continue;
+      const next = card.getBoundingClientRect();
+      const deltaX = previous.left - next.left;
+      const deltaY = previous.top - next.top;
+      if (deltaX === 0 && deltaY === 0) continue;
+      card.animate(
+        [{ transform: `translate(${deltaX}px, ${deltaY}px)` }, { transform: "translate(0, 0)" }],
+        { duration: 180, easing: "cubic-bezier(.2,.8,.2,1)" },
+      );
+    }
+  }
+
+  private renderAccountCategoryChart(container: HTMLElement, accountId: string): void {
+    const range = this.customRange ?? getPeriodRange(this.period, this.anchorDate);
+    const expenses = this.store.getIndex().transactions.filter((transaction) =>
+      transaction.kind === "expense"
+      && transaction.accountId === accountId
+      && transaction.date >= range.start
+      && transaction.date <= range.end);
+    const total = expenses.reduce((sum, transaction) => sum + transaction.amount, 0);
+    const totals = new Map<string, number>();
+    for (const expense of expenses) totals.set(expense.category, (totals.get(expense.category) ?? 0) + expense.amount);
+    const categories = [...totals.entries()]
+      .map(([name, amount]) => ({ name, amount }))
+      .sort((left, right) => right.amount - left.amount);
+    const visible = categories.slice(0, categories.length > 4 ? 3 : 4);
+    if (categories.length > 4) visible.push({
+      name: t("Другое", "Other"),
+      amount: categories.slice(3).reduce((sum, category) => sum + category.amount, 0),
+    });
+    const chart = container.createDiv({ cls: `oxf-account-category-chart${total === 0 ? " is-empty" : ""}` });
+    const donut = chart.createDiv({ cls: "oxf-account-category-donut" });
+    if (total > 0) {
+      let cursor = 0;
+      const colors = categoryColors();
+      const stops = visible.map((category, index) => {
+        const start = cursor;
+        cursor += (category.amount / total) * 100;
+        return `${colors[index] ?? colors[0]} ${start}% ${cursor}%`;
+      });
+      donut.setCssProps({ background: `conic-gradient(${stops.join(",")})` });
+    }
+    const center = donut.createDiv();
+    center.createSpan({ text: t("Расходы", "Expenses") });
+    center.createEl("strong", { text: `${money(total)} ₽` });
+    const legend = chart.createDiv({ cls: "oxf-account-category-legend" });
+    if (visible.length === 0) {
+      legend.createSpan({ cls: "oxf-account-category-empty", text: t("Нет расходов за период", "No expenses for this period") });
+      return;
+    }
+    visible.forEach((category, index) => {
+      const row = legend.createDiv();
+      row.createSpan({ cls: `oxf-category-marker is-color-${index + 1}` });
+      row.createSpan({ text: category.name });
+      row.createEl("strong", { text: `${Math.round((category.amount / total) * 100)}%` });
+    });
+  }
+
   private showAccountMenu(event: MouseEvent, account: FinanceAccount): void {
     const menu = new Menu();
-    menu.addItem((item) => item.setTitle(t("Записать расход", "Record expense")).setIcon("minus-circle")
-      .onClick(() => this.actions.openTransaction("expense", account.id)));
     menu.addItem((item) => item.setTitle(t("Изменить счёт", "Edit account")).setIcon("pencil")
       .onClick(() => this.actions.editAccount(account)));
     menu.addSeparator();
@@ -829,31 +1304,27 @@ export class FinanceView extends ItemView {
     menu.showAtMouseEvent(event);
   }
 
-  private renderHistory(container: HTMLElement, transactions: FinanceTransaction[], title: string): void {
+  private renderRecentOperations(container: HTMLElement, operations: RecentOperation[]): void {
     const card = container.createEl("section", { cls: "oxf-card oxf-history-card" });
     const heading = card.createDiv({ cls: "oxf-history-heading" });
-    heading.createEl("strong", { text: title });
-    const actions = heading.createDiv();
-    const expense = actions.createEl("button", { text: t("+ Расход", "+ Expense"), attr: { type: "button" } });
-    expense.addEventListener("click", () => this.actions.openTransaction("expense"));
-    const income = actions.createEl("button", { text: t("+ Доход", "+ Income"), attr: { type: "button" } });
-    income.addEventListener("click", () => this.actions.openTransaction("income"));
-    if (transactions.length === 0) return void card.createEl("p", { cls: "oxf-empty", text: t("За выбранный период операций нет.", "There are no transactions in the selected period.") });
+    heading.createEl("strong", { text: t("Последние операции", "Recent transactions") });
+    if (operations.length === 0) return void card.createEl("p", { cls: "oxf-empty", text: t("За выбранный период операций нет.", "There are no transactions in the selected period.") });
     const columns = card.createDiv({ cls: "oxf-history-columns" });
-    columns.createSpan({ text: t("Категория", "Category") });
+    columns.createSpan({ text: t("Комментарий", "Comment") });
     columns.createSpan({ text: t("Дата", "Date") });
-    columns.createSpan({ text: t("Тип", "Type") });
     columns.createSpan({ text: t("Сумма", "Amount") });
     const list = card.createDiv({ cls: "oxf-history-list" });
-    for (const transaction of transactions) {
+    for (const operation of operations) {
       const row = list.createEl("button", { cls: "oxf-history-row", attr: { type: "button" } });
       const name = row.createDiv();
-      name.createEl("strong", { text: transaction.category });
-      name.createSpan({ text: transaction.comment ?? transaction.file.basename });
-      row.createEl("time", { text: dateLabel(transaction.date) });
-      row.createSpan({ text: transaction.kind === "income" ? t("Доход", "Income") : t("Расход", "Expense") });
-      row.createEl("b", { cls: `is-${transaction.kind}`, text: `${transaction.kind === "income" ? "+" : "−"}${money(transaction.amount)} ₽` });
-      row.addEventListener("click", () => void this.app.workspace.getLeaf(false).openFile(transaction.file));
+      const title = name.createDiv({ cls: "oxf-operation-title" });
+      title.createSpan({ cls: `oxf-operation-dot is-${operation.kind}`, attr: { "aria-hidden": "true" } });
+      title.createEl("strong", { text: operation.title });
+      name.createSpan({ text: operation.subtitle });
+      row.createEl("time", { text: dateLabel(operation.date) });
+      const prefix = operation.kind === "income" ? "+" : operation.kind === "expense" ? "−" : "→";
+      row.createEl("b", { cls: `is-${operation.kind}`, text: `${prefix}${money(operation.amount)} ₽` });
+      row.addEventListener("click", () => void this.app.workspace.getLeaf(false).openFile(operation.file));
     }
   }
 

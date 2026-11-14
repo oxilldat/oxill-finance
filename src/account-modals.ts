@@ -28,7 +28,6 @@ export class AccountModal extends Modal {
       text.setPlaceholder(t("Основной", "Main")).setValue(this.name).onChange((value) => { this.name = value; }));
     new Setting(this.contentEl)
       .setName(t("Иконка", "Icon"))
-      .setDesc(t("Выберите иконку Obsidian", "Choose an Obsidian icon"))
       .addButton((button) => {
         button.setButtonText(t("Выбрать", "Choose"));
         button.buttonEl.addClass("oxf-account-icon-select");

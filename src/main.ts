@@ -18,6 +18,8 @@ import { createMonthSummarySnapshot, monthPeriod } from "./core/month-summary";
 import { MonthSummaryModal } from "./month-summary-modal";
 import { PersonNetworkConnector } from "./person-network-connector";
 import { DebtPlanModal } from "./debt-plan-modal";
+import { summarizeDebtPlanning } from "./core/debts";
+import { addCustomCategory as appendCustomCategory } from "./core/categories";
 
 export default class OxillFinancePlugin extends Plugin {
   private store!: TransactionStore;
@@ -31,13 +33,14 @@ export default class OxillFinancePlugin extends Plugin {
     setFinanceLocale(this.settings.language);
     this.personNetwork = new PersonNetworkConnector(this.app);
     this.store = new TransactionStore(this.app, () => this.getStorageFolders());
+    this.register(this.store.subscribe(() => { void this.ensureDefaultAccount(); }));
     this.registerView(VIEW_TYPE_FINANCE, (leaf) => new FinanceView(leaf, this.store, this.financeActions()));
     this.addSettingTab(new FinanceSettingTab(this.app, this));
     this.addCommand({ id: "open-finance", name: t("Открыть", "Open"), callback: () => void this.activateView() });
     this.addCommand({ id: "add-expense", name: t("Добавить расход", "Add expense"), callback: () => this.openTransactionModal("expense") });
     this.addCommand({ id: "add-income", name: t("Добавить доход", "Add income"), callback: () => this.openTransactionModal("income") });
     this.addCommand({ id: "add-expense-plan", name: t("Запланировать расход", "Plan expense"), callback: () =>
-      new ExpensePlanModal(this.app, this.store, () => this.scheduleRefresh(120)).open() });
+      new ExpensePlanModal(this.app, this.store, () => this.scheduleRefresh(120), undefined, undefined, () => this.getAvailableCategories()).open() });
     this.addCommand({ id: "add-income-plan", name: t("Запланировать доход", "Plan income"), callback: () =>
       new IncomePlanModal(this.app, this.store, () => this.scheduleRefresh(120)).open() });
     this.addCommand({ id: "export-excel", name: t("Экспортировать данные в Excel", "Export data to Excel"), callback: () => this.exportFinanceExcel(false) });
@@ -80,19 +83,21 @@ export default class OxillFinancePlugin extends Plugin {
       editDebt: (debt) => new DebtModal(this.app, this.store, this.personNetwork, this.settings.personNetworkConnectorEnabled, () => this.scheduleRefresh(120), debt).open(),
       deleteDebt: (debt) => new DeleteDebtModal(this.app, this.store, debt, () => this.scheduleRefresh(120)).open(),
       setDebtArchived: (debt, archived) => void this.setDebtArchived(debt, archived),
-      planDebtPayment: (direction) => this.openDebtPlanModal(direction),
-      createPlan: (category, dueDate) => new ExpensePlanModal(this.app, this.store, () => this.scheduleRefresh(120), undefined, { category, dueDate }).open(),
-      editPlan: (plan) => new ExpensePlanModal(this.app, this.store, () => this.scheduleRefresh(120), plan).open(),
+      planDebtPayment: (direction, debtId) => this.openDebtPlanModal(direction, debtId),
+      createPlan: (category, dueDate, fundedByIncomePlanId) => new ExpensePlanModal(this.app, this.store, () => this.scheduleRefresh(120), undefined, { category, dueDate, fundedByIncomePlanId }, () => this.getAvailableCategories()).open(),
+      editPlan: (plan) => new ExpensePlanModal(this.app, this.store, () => this.scheduleRefresh(120), plan, undefined, () => this.getAvailableCategories()).open(),
       deletePlan: (plan) => new DeleteExpensePlanModal(this.app, this.store, plan, () => this.scheduleRefresh(120)).open(),
       completePlan: (plan) => void this.completePlan(plan),
       createIncomePlan: () => new IncomePlanModal(this.app, this.store, () => this.scheduleRefresh(120)).open(),
       editIncomePlan: (plan) => new IncomePlanModal(this.app, this.store, () => this.scheduleRefresh(120), plan).open(),
       deleteIncomePlan: (plan) => new DeleteIncomePlanModal(this.app, this.store, plan, () => this.scheduleRefresh(120)).open(),
       completeIncomePlan: (plan) => void this.completeIncomePlan(plan),
-      createPlannedTransfer: () => new PlannedTransferModal(this.app, this.store, () => this.scheduleRefresh(120)).open(),
+      createPlannedTransfer: (dueDate, fundedByIncomePlanId) => new PlannedTransferModal(this.app, this.store, () => this.scheduleRefresh(120), undefined, { dueDate, fundedByIncomePlanId }).open(),
       editPlannedTransfer: (plan) => new PlannedTransferModal(this.app, this.store, () => this.scheduleRefresh(120), plan).open(),
       deletePlannedTransfer: (plan) => new DeletePlannedTransferModal(this.app, this.store, plan, () => this.scheduleRefresh(120)).open(),
       completePlannedTransfer: (plan) => void this.completePlannedTransfer(plan),
+      setExpensePlanFunding: (plan, incomePlanId) => void this.setExpensePlanFunding(plan, incomePlanId),
+      setPlannedTransferFunding: (plan, incomePlanId) => void this.setPlannedTransferFunding(plan, incomePlanId),
       ensureMonthSummary: (year, month) => void this.ensureMonthSummary(year, month),
       openMonthSummary: (summary) => void this.openMonthSummary(summary),
       selectedCategories: () => this.settings.selectedCategories,
@@ -103,10 +108,31 @@ export default class OxillFinancePlugin extends Plugin {
   }
 
   private openTransactionModal(kind: TransactionKind, accountId?: string): void {
-    new TransactionModal(this.app, kind, this.store, () => this.scheduleRefresh(120), accountId).open();
+    const accounts = this.store.getIndex().accounts;
+    if (accounts.length === 0) {
+      new Notice(t("Сначала создайте счёт", "Create an account first"));
+      return;
+    }
+    const initialAccountId = accountId && accounts.some((account) => account.id === accountId)
+      ? accountId
+      : accounts.some((account) => account.id === this.settings.defaultAccountId)
+        ? this.settings.defaultAccountId
+        : accounts[0]?.id;
+    new TransactionModal(
+      this.app,
+      kind,
+      this.store,
+      () => this.scheduleRefresh(120),
+      initialAccountId,
+      () => this.getTransactionCategories(kind),
+    ).open();
   }
 
   private openDeleteAccountModal(account: FinanceAccount): void {
+    if (account.id === this.settings.defaultAccountId) {
+      new Notice(t("Сначала выберите другой счёт по умолчанию в настройках", "Choose another default account in settings first"));
+      return;
+    }
     if (Math.abs(account.balance) > 0.005) {
       new Notice(t("Сначала переведите все средства на другой счёт", "Transfer all funds to another account first"));
       return;
@@ -136,6 +162,24 @@ export default class OxillFinancePlugin extends Plugin {
     }
   }
 
+  private async setExpensePlanFunding(plan: ExpensePlan, incomePlanId?: string): Promise<void> {
+    try {
+      await this.store.setExpensePlanFunding(plan, incomePlanId);
+      this.scheduleRefresh(60);
+    } catch (error) {
+      new Notice(error instanceof Error ? error.message : t("Не удалось распределить расход", "Could not allocate the expense"));
+    }
+  }
+
+  private async setPlannedTransferFunding(plan: PlannedTransfer, incomePlanId?: string): Promise<void> {
+    try {
+      await this.store.setPlannedTransferFunding(plan, incomePlanId);
+      this.scheduleRefresh(60);
+    } catch (error) {
+      new Notice(error instanceof Error ? error.message : t("Не удалось распределить перевод", "Could not allocate the transfer"));
+    }
+  }
+
   private async completeIncomePlan(plan: IncomePlan): Promise<void> {
     try {
       await this.store.completeIncomePlan(plan);
@@ -158,13 +202,17 @@ export default class OxillFinancePlugin extends Plugin {
     }
   }
 
-  private openDebtPlanModal(direction: DebtPlanDirection): void {
-    const available = this.store.getIndex().debts.some((debt) => !debt.archivedAt && (direction === "pay" ? debt.amount < 0 : debt.amount > 0));
+  private openDebtPlanModal(direction: DebtPlanDirection, debtId?: string): void {
+    const index = this.store.getIndex();
+    const available = index.debts.some((debt) =>
+      !debt.archivedAt
+      && (direction === "pay" ? debt.amount < 0 : debt.amount > 0)
+      && summarizeDebtPlanning(debt, index.plans, index.incomePlans).unplannedAmount > 0.005);
     if (!available) {
       new Notice(direction === "pay" ? t("Нет активных долгов к погашению", "No active debts to repay") : t("Нет активных долгов к получению", "No active debts to collect"));
       return;
     }
-    new DebtPlanModal(this.app, this.store, direction, () => this.scheduleRefresh(120)).open();
+    new DebtPlanModal(this.app, this.store, direction, () => this.scheduleRefresh(120), debtId).open();
   }
 
   private async ensureMonthSummary(year: number, month: number): Promise<void> {
@@ -243,6 +291,54 @@ export default class OxillFinancePlugin extends Plugin {
       ...index.plans.map((plan) => plan.category),
     ])]
       .sort((left, right) => left.localeCompare(right, this.settings.language));
+  }
+
+  getAccounts(): readonly FinanceAccount[] {
+    return this.store.getIndex().accounts;
+  }
+
+  private async ensureDefaultAccount(): Promise<void> {
+    const accounts = this.store.getIndex().accounts;
+    const nextId = accounts.some((account) => account.id === this.settings.defaultAccountId)
+      ? this.settings.defaultAccountId
+      : accounts[0]?.id ?? "";
+    if (nextId === this.settings.defaultAccountId) return;
+    this.settings.defaultAccountId = nextId;
+    this.settings = normalizeFinanceSettings(this.settings);
+    await this.saveData(this.settings);
+  }
+
+  private getTransactionCategories(kind: TransactionKind): string[] {
+    const index = this.store.getIndex();
+    const categories = kind === "expense"
+      ? [
+        ...this.settings.customCategories,
+        ...index.transactions.filter((item) => item.kind === "expense").map((item) => item.category),
+        ...index.plans.map((plan) => plan.category),
+      ]
+      : [
+        ...index.transactions.filter((item) => item.kind === "income").map((item) => item.category),
+        ...index.incomePlans.map((plan) => plan.category),
+      ];
+    return [...new Set(categories)].sort((left, right) => left.localeCompare(right, this.settings.language));
+  }
+
+  async addCustomCategory(value: string): Promise<boolean> {
+    const result = appendCustomCategory(
+      this.settings.customCategories,
+      this.getAvailableCategories(),
+      value,
+    );
+    if (!result.added) return false;
+
+    const nextSettings = normalizeFinanceSettings({
+      ...this.settings,
+      customCategories: result.categories,
+    });
+    await this.saveData(nextSettings);
+    this.settings = nextSettings;
+    this.store.refresh();
+    return true;
   }
 
   getFinanceIndex(): FinanceIndex { return this.store.getIndex(); }

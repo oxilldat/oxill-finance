@@ -7,12 +7,28 @@ import { FinanceTransaction } from "../types";
 import { setFinanceLocale } from "../i18n";
 import { excelHeaders } from "./excel-schema";
 import { normalizeAccountIcon } from "./account-icons";
-import { calculateDebtPayment, splitDebtsByArchive, summarizeDebts } from "./debts";
+import { calculateDebtPayment, splitDebtsByArchive, summarizeDebtPlanning, summarizeDebts } from "./debts";
 import { calculateMonthlyPlanningBudget, calculatePlanningForecast } from "./planning";
+import { calculateIncomeAllocation } from "./income-allocation";
 import type { ExpensePlan, IncomePlan, PlannedTransfer } from "../types";
 import { createMonthSummarySnapshot, expenseDeviationPercent } from "./month-summary";
 import { createMonthSummaryWorkbook } from "./month-summary-excel";
 import type { FinanceMonthSummary } from "../types";
+import { addCustomCategory } from "./categories";
+
+test("добавляет пользовательскую категорию после нормализации названия", () => {
+  assert.deepEqual(addCustomCategory([], ["Жильё"], "  Путешествия  "), {
+    added: true,
+    categories: ["Путешествия"],
+    name: "Путешествия",
+  });
+});
+
+test("не добавляет пустую или существующую категорию повторно", () => {
+  assert.equal(addCustomCategory([], ["Жильё"], "   ").added, false);
+  assert.equal(addCustomCategory([], ["Жильё"], "жильё").added, false);
+  assert.deepEqual(addCustomCategory(["Кафе"], ["Кафе"], "кафе").categories, ["Кафе"]);
+});
 
 test("нормализует старые символы счетов в иконки Obsidian", () => {
   assert.equal(normalizeAccountIcon("💳"), "credit-card");
@@ -48,6 +64,20 @@ test("уменьшает долг частичным платежом и зак�
   });
 });
 
+test("учитывает уже запланированные платежи по долгу", () => {
+  const debt = { id: "debt-1", amount: -13_000 };
+  const status = summarizeDebtPlanning(debt, [
+    { debtId: "debt-1", amount: 3_000, status: "planned", dueDate: new Date("2026-11-20T12:00:00") },
+    { debtId: "debt-1", amount: 2_000, status: "paid", dueDate: new Date("2026-11-10T12:00:00") },
+    { debtId: "other", amount: 4_000, status: "planned", dueDate: new Date("2026-11-15T12:00:00") },
+  ], []);
+  assert.deepEqual(status, {
+    plannedAmount: 3_000,
+    unplannedAmount: 10_000,
+    nextDueDate: new Date("2026-11-20T12:00:00"),
+  });
+});
+
 test("рассчитывает прогноз с плановыми доходами и расходами", () => {
   const file = { path: "plan.md" } as TFile;
   const expense = { amount: 30_000, status: "planned", file } as ExpensePlan;
@@ -71,6 +101,15 @@ test("рассчитывает свободные деньги выбранно�
     transfers: 40_000,
     free: 0,
   });
+});
+
+test("распределяет расход и перевод по части дохода", () => {
+  assert.deepEqual(calculateIncomeAllocation(45_000, [{ amount: 25_000 }], [{ amount: 12_000 }]), {
+    allocated: 37_000,
+    unallocated: 8_000,
+    overallocated: false,
+  });
+  assert.equal(calculateIncomeAllocation(30_000, [{ amount: 31_000 }], []).overallocated, true);
 });
 
 test("фиксирует план и факт завершённого месяца", () => {

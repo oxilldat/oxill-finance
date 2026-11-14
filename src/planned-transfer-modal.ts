@@ -9,14 +9,22 @@ export class PlannedTransferModal extends Modal {
   private dueDate: string;
   private fromAccountId: string;
   private toAccountId: string;
+  private fundedByIncomePlanId?: string;
 
-  constructor(app: App, private readonly store: TransactionStore, private readonly afterSave: () => void, private readonly plan?: PlannedTransfer) {
+  constructor(
+    app: App,
+    private readonly store: TransactionStore,
+    private readonly afterSave: () => void,
+    private readonly plan?: PlannedTransfer,
+    defaults?: { dueDate?: Date; fundedByIncomePlanId?: string },
+  ) {
     super(app);
     const accounts = store.getIndex().accounts;
     this.amount = plan ? String(plan.amount) : "";
-    this.dueDate = localDateValue(plan?.dueDate ?? new Date());
+    this.dueDate = localDateValue(plan?.dueDate ?? defaults?.dueDate ?? new Date());
     this.fromAccountId = plan?.fromAccountId ?? accounts[0]?.id ?? "";
     this.toAccountId = plan?.toAccountId ?? accounts.find((account) => account.id !== this.fromAccountId)?.id ?? "";
+    this.fundedByIncomePlanId = plan?.fundedByIncomePlanId ?? defaults?.fundedByIncomePlanId;
   }
 
   onOpen(): void {
@@ -48,7 +56,7 @@ export class PlannedTransferModal extends Modal {
     if (this.fromAccountId === this.toAccountId) return void new Notice(t("Выберите разные счета", "Select different accounts"));
     if (!Number.isFinite(amount) || amount <= 0) return void new Notice(t("Введите сумму больше нуля", "Enter an amount greater than zero"));
     if (Number.isNaN(dueDate.getTime())) return void new Notice(t("Введите корректную дату", "Enter a valid date"));
-    const input = { amount, dueDate, fromAccountId: this.fromAccountId, toAccountId: this.toAccountId };
+    const input = { amount, dueDate, fromAccountId: this.fromAccountId, toAccountId: this.toAccountId, fundedByIncomePlanId: this.fundedByIncomePlanId };
     if (this.plan) await this.store.updatePlannedTransfer(this.plan, input); else await this.store.createPlannedTransfer(input);
     this.afterSave(); this.close();
   }

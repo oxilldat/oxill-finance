@@ -3,8 +3,9 @@ import { App, Modal, Notice, Setting } from "obsidian";
 import { TransactionStore } from "./transaction-store";
 import { ExpensePlan, ExpensePlanCompletion } from "./types";
 import { t } from "./i18n";
+import { CategorySuggest } from "./category-suggest";
 
-export interface ExpensePlanDefaults { category?: string; dueDate?: Date; }
+export interface ExpensePlanDefaults { category?: string; dueDate?: Date; fundedByIncomePlanId?: string; }
 
 export class ExpensePlanModal extends Modal {
   private title = "";
@@ -13,6 +14,8 @@ export class ExpensePlanModal extends Modal {
   private category = "";
   private accountId = "";
   private completion: ExpensePlanCompletion = "mark-only";
+  private fundedByIncomePlanId?: string;
+  private categorySuggest?: CategorySuggest;
 
   constructor(
     app: App,
@@ -20,6 +23,7 @@ export class ExpensePlanModal extends Modal {
     private readonly afterSave: () => void,
     private readonly plan?: ExpensePlan,
     defaults?: ExpensePlanDefaults,
+    private readonly categories: () => string[] = () => [],
   ) {
     super(app);
     this.title = plan?.title ?? "";
@@ -28,6 +32,7 @@ export class ExpensePlanModal extends Modal {
     this.category = plan?.category ?? defaults?.category ?? "";
     this.accountId = plan?.accountId ?? "";
     this.completion = plan?.completion ?? "mark-only";
+    this.fundedByIncomePlanId = plan?.fundedByIncomePlanId ?? defaults?.fundedByIncomePlanId;
   }
 
   onOpen(): void {
@@ -45,8 +50,14 @@ export class ExpensePlanModal extends Modal {
       text.inputEl.type = "date";
       text.setValue(this.dueDate).onChange((value) => { this.dueDate = value; });
     });
-    new Setting(this.contentEl).setName(t("Категория", "Category")).addText((text) =>
-      text.setPlaceholder(t("Образование", "Education")).setValue(this.category).onChange((value) => { this.category = value; }));
+    new Setting(this.contentEl).setName(t("Категория", "Category")).addText((text) => {
+      text.setPlaceholder(t("Введите или выберите", "Type or choose"))
+        .setValue(this.category)
+        .onChange((value) => { this.category = value; });
+      this.categorySuggest = new CategorySuggest(this.app, text.inputEl, () =>
+        [...new Set([...this.categories(), ...(this.category ? [this.category] : [])])]
+          .sort((left, right) => left.localeCompare(right)), (category) => { this.category = category; });
+    });
     const accounts = this.store.getIndex().accounts;
     new Setting(this.contentEl).setName(t("Счёт", "Account")).setDesc(t("Необязательно", "Optional")).addDropdown((dropdown) => {
       dropdown.addOption("", t("Без счёта", "No account"));
@@ -63,7 +74,7 @@ export class ExpensePlanModal extends Modal {
     actions.createEl("button", { cls: "mod-cta", text: this.plan ? t("Сохранить", "Save") : t("Создать", "Create") }).addEventListener("click", () => void this.save());
   }
 
-  onClose(): void { this.contentEl.empty(); }
+  onClose(): void { this.categorySuggest?.close(); this.contentEl.empty(); }
 
   private async save(): Promise<void> {
     const amount = Number(this.amount.replace(",", "."));
@@ -71,10 +82,11 @@ export class ExpensePlanModal extends Modal {
     if (!this.title.trim()) return void new Notice(t("Введите название расхода", "Enter an expense name"));
     if (!Number.isFinite(amount) || amount <= 0) return void new Notice(t("Введите сумму больше нуля", "Enter an amount greater than zero"));
     if (Number.isNaN(dueDate.getTime())) return void new Notice(t("Введите корректный срок", "Enter a valid due date"));
-    if (!this.category.trim()) return void new Notice(t("Введите категорию", "Enter a category"));
+    if (!this.category.trim()) return void new Notice(t("Введите или выберите категорию", "Enter or choose a category"));
     const input = {
       title: this.title.trim(), amount, dueDate, category: this.category.trim(),
       accountId: this.accountId || undefined, completion: this.completion,
+      fundedByIncomePlanId: this.fundedByIncomePlanId,
     };
     if (this.plan) await this.store.updateExpensePlan(this.plan, input);
     else await this.store.createExpensePlan(input);

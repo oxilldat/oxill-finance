@@ -14,6 +14,7 @@ export interface OxillFinanceSettings {
   accountsFolder: string;
   planningFolder: string;
   debtsFolder: string;
+  defaultAccountId: string;
   autoRecalculateMonthSummary: boolean;
   personNetworkConnectorEnabled: boolean;
 }
@@ -27,6 +28,7 @@ export const DEFAULT_SETTINGS: OxillFinanceSettings = {
   accountsFolder: "Финансы/Счета",
   planningFolder: "Финансы/Планирование",
   debtsFolder: "Финансы/Долги",
+  defaultAccountId: "",
   autoRecalculateMonthSummary: true,
   personNetworkConnectorEnabled: false,
 };
@@ -36,11 +38,14 @@ type FolderSettingKey = "operationsFolder" | "accountsFolder" | "planningFolder"
 export function normalizeFinanceSettings(settings: OxillFinanceSettings): OxillFinanceSettings {
   return {
     ...settings,
+    customCategories: normalizeStringList(settings.customCategories),
+    selectedCategories: normalizeStringList(settings.selectedCategories),
     hiddenPlanningCategories: Array.isArray(settings.hiddenPlanningCategories) ? [...new Set(settings.hiddenPlanningCategories.filter((value): value is string => typeof value === "string" && value.trim().length > 0))] : [],
     operationsFolder: normalizeFolder(settings.operationsFolder, DEFAULT_SETTINGS.operationsFolder),
     accountsFolder: normalizeFolder(settings.accountsFolder, DEFAULT_SETTINGS.accountsFolder),
     planningFolder: normalizeFolder(settings.planningFolder, DEFAULT_SETTINGS.planningFolder),
     debtsFolder: normalizeFolder(settings.debtsFolder, DEFAULT_SETTINGS.debtsFolder),
+    defaultAccountId: typeof settings.defaultAccountId === "string" ? settings.defaultAccountId : "",
     autoRecalculateMonthSummary: settings.autoRecalculateMonthSummary !== false,
     personNetworkConnectorEnabled: settings.personNetworkConnectorEnabled === true,
   };
@@ -103,6 +108,24 @@ export class FinanceSettingTab extends PluginSettingTab {
                   this.plugin.settings.autoRecalculateMonthSummary = value;
                   await this.plugin.saveFinanceSettings();
                 }));
+            },
+          },
+          {
+            name: t("Счёт по умолчанию", "Default account"),
+            desc: t("Автоматически выбирать этот счёт для новых доходов и расходов. Такой счёт нельзя удалить.", "Select this account automatically for new income and expenses. The default account cannot be deleted."),
+            render: (setting) => {
+              const accounts = this.plugin.getAccounts();
+              setting.addDropdown((dropdown) => {
+                if (accounts.length === 0) dropdown.addOption("", t("Сначала создайте счёт", "Create an account first"));
+                for (const account of accounts) dropdown.addOption(account.id, account.name);
+                dropdown
+                  .setValue(accounts.some((account) => account.id === this.plugin.settings.defaultAccountId) ? this.plugin.settings.defaultAccountId : accounts[0]?.id ?? "")
+                  .setDisabled(accounts.length === 0)
+                  .onChange(async (value) => {
+                    this.plugin.settings.defaultAccountId = value;
+                    await this.plugin.saveFinanceSettings();
+                  });
+              });
             },
           },
           {
@@ -222,39 +245,51 @@ export class FinanceSettingTab extends PluginSettingTab {
   }
 
   private renderCategoryManager(items: HTMLElement, refresh: () => void): void {
-    let value = "";
-    let addButton: HTMLButtonElement;
+    let inputEl: HTMLInputElement | undefined;
+    let addButton: HTMLButtonElement | undefined;
+    let isSaving = false;
     const addCategory = async (): Promise<void> => {
-      const name = value.trim();
-      if (!name) return;
-      const duplicate = this.plugin.getAvailableCategories()
-        .some((category) => category.localeCompare(name, undefined, { sensitivity: "accent" }) === 0);
-      if (duplicate) {
-        new Notice(t("Такая категория уже существует", "This category already exists"));
-        return;
+      if (!inputEl || !addButton) return;
+      const name = inputEl.value.trim();
+      if (!name || isSaving) return;
+      isSaving = true;
+      addButton.disabled = true;
+      try {
+        if (!await this.plugin.addCustomCategory(name)) {
+          new Notice(t("Такая категория уже существует", "This category already exists"));
+          return;
+        }
+        inputEl.value = "";
+        new Notice(t("Категория добавлена", "Category added"));
+        refresh();
+      } catch (error) {
+        new Notice(error instanceof Error
+          ? error.message
+          : t("Не удалось добавить категорию", "Could not add the category"));
+      } finally {
+        isSaving = false;
+        if (addButton?.isConnected) addButton.disabled = inputEl?.value.trim().length === 0;
       }
-      this.plugin.settings.customCategories = [...this.plugin.settings.customCategories, name];
-      await this.plugin.saveFinanceSettings();
-      refresh();
     };
     const create = new Setting(items)
       .setName(t("Новая категория", "New category"))
       .setDesc(t("Название можно будет использовать в планировании и новых операциях.", "The name can be used in planning and new transactions."))
       .addText((text) => {
+        inputEl = text.inputEl;
         text.setPlaceholder(t("Например, Путешествия", "For example, Travel"));
         text.onChange((next) => {
-          value = next;
-          addButton.disabled = value.trim().length === 0;
+          if (addButton) addButton.disabled = next.trim().length === 0 || isSaving;
         });
         text.inputEl.addEventListener("keydown", (event) => {
-          if (event.key !== "Enter" || value.trim().length === 0) return;
+          if (event.key !== "Enter" || text.inputEl.value.trim().length === 0) return;
           event.preventDefault();
           void addCategory();
         });
       })
       .addButton((button) => {
-        button.setButtonText(t("Добавить", "Add")).setCta().setDisabled(true).onClick(() => void addCategory());
+        button.setButtonText(t("Добавить", "Add")).setCta().setDisabled(true);
         addButton = button.buttonEl;
+        addButton.addEventListener("click", () => { void addCategory(); });
       });
     create.setClass("oxf-finance-category-create");
 
@@ -381,6 +416,15 @@ export class FinanceSettingTab extends PluginSettingTab {
 function normalizeFolder(value: unknown, fallback: string): string {
   const trimmed = (typeof value === "string" ? value : "").trim().replace(/^\/+|\/+$/g, "");
   return trimmed ? normalizePath(trimmed) : fallback;
+}
+
+function normalizeStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const normalized = value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return [...new Set(normalized)];
 }
 
 class RefreshableSettingsModal extends Modal {

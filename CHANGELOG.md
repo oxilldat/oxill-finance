@@ -2,6 +2,16 @@
 
 All notable changes to Oxill Finance are documented in this file.
 
+## 1.0.15 — 2026-11-14
+
+- Reworked monthly and yearly planning into responsive expense, transfer, and income-allocation workflows.
+- Added compact search, category/account, and status filters with theme-aware Obsidian menus.
+- Connected debt repayments and collections to planning with reserved amounts, linked operations, and automatic balance updates.
+- Redesigned account cards, period navigation, category breakdowns, and drag-and-drop ordering.
+- Made a default account mandatory for new income and expenses and protected it from deletion.
+- Replaced raw account selectors with icon-aware menus and added editable category suggestions to transaction forms.
+- Fixed category creation, menu toggle behavior, dark-theme controls, focus states, spacing, and responsive layouts.
+
 ## 1.0.6 — 2026-10-28
 
 - Added native folder suggestions to all storage path settings.

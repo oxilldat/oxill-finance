@@ -3,6 +3,7 @@ import { App, Modal, Notice, Setting } from "obsidian";
 import { t } from "./i18n";
 import { TransactionStore } from "./transaction-store";
 import { FinanceDebt } from "./types";
+import { summarizeDebtPlanning } from "./core/debts";
 
 export type DebtPlanDirection = "pay" | "receive";
 
@@ -17,11 +18,14 @@ export class DebtPlanModal extends Modal {
     private readonly store: TransactionStore,
     private readonly direction: DebtPlanDirection,
     private readonly afterSave: () => void,
+    initialDebtId?: string,
   ) {
     super(app);
-    const debt = this.availableDebts()[0];
+    const debts = this.availableDebts();
+    const debt = debts.find((item) => item.id === initialDebtId) ?? debts[0];
     this.debtId = debt?.id ?? "";
-    this.amount = debt ? String(Math.abs(debt.amount)) : "";
+    this.amount = debt ? String(this.planningStatus(debt).unplannedAmount) : "";
+    this.accountId = this.store.getIndex().accounts[0]?.id ?? "";
   }
 
   onOpen(): void {
@@ -40,7 +44,7 @@ export class DebtPlanModal extends Modal {
       dropdown.setValue(this.debtId).onChange((value) => {
         this.debtId = value;
         const debt = debts.find((item) => item.id === value);
-        this.amount = debt ? String(Math.abs(debt.amount)) : "";
+        this.amount = debt ? String(this.planningStatus(debt).unplannedAmount) : "";
         this.renderForm();
       });
     });
@@ -48,7 +52,7 @@ export class DebtPlanModal extends Modal {
     new Setting(this.contentEl).setName(t("Сумма", "Amount")).addText((text) => {
       text.inputEl.type = "number";
       text.inputEl.min = "0.01";
-      if (debt) text.inputEl.max = String(Math.abs(debt.amount));
+      if (debt) text.inputEl.max = String(this.planningStatus(debt).unplannedAmount);
       text.inputEl.step = "0.01";
       text.setValue(this.amount).onChange((value) => { this.amount = value; });
     });
@@ -60,7 +64,6 @@ export class DebtPlanModal extends Modal {
     new Setting(this.contentEl)
       .setName(this.direction === "pay" ? t("Счёт списания", "Source account") : t("Счёт зачисления", "Destination account"))
       .addDropdown((dropdown) => {
-        dropdown.addOption("", t("Без счёта", "No account"));
         for (const account of accounts) dropdown.addOption(account.id, account.name);
         dropdown.setValue(this.accountId).onChange((value) => { this.accountId = value; });
       });
@@ -75,7 +78,8 @@ export class DebtPlanModal extends Modal {
     const amount = Number(this.amount.replace(",", "."));
     const dueDate = new Date(`${this.dueDate}T12:00:00`);
     if (!Number.isFinite(amount) || amount <= 0) return void new Notice(t("Введите сумму больше нуля", "Enter an amount greater than zero"));
-    if (amount - Math.abs(debt.amount) > 0.005) return void new Notice(t("Сумма превышает остаток долга", "Amount exceeds the remaining debt"));
+    if (!this.accountId) return void new Notice(t("Создайте или выберите счёт", "Create or select an account"));
+    if (amount - this.planningStatus(debt).unplannedAmount > 0.005) return void new Notice(t("Сумма превышает незапланированный остаток долга", "Amount exceeds the unplanned debt balance"));
     if (Number.isNaN(dueDate.getTime())) return void new Notice(t("Введите корректную дату", "Enter a valid date"));
     const common = { amount, dueDate, category: t("Долги", "Debts"), accountId: this.accountId || undefined, debtId: debt.id };
     if (this.direction === "pay") {
@@ -89,7 +93,15 @@ export class DebtPlanModal extends Modal {
   }
 
   private availableDebts(): FinanceDebt[] {
-    return this.store.getIndex().debts.filter((debt) => !debt.archivedAt && (this.direction === "pay" ? debt.amount < 0 : debt.amount > 0));
+    return this.store.getIndex().debts.filter((debt) =>
+      !debt.archivedAt
+      && (this.direction === "pay" ? debt.amount < 0 : debt.amount > 0)
+      && this.planningStatus(debt).unplannedAmount > 0.005);
+  }
+
+  private planningStatus(debt: FinanceDebt): ReturnType<typeof summarizeDebtPlanning> {
+    const index = this.store.getIndex();
+    return summarizeDebtPlanning(debt, index.plans, index.incomePlans);
   }
 }
 
