@@ -10,6 +10,7 @@ import { normalizeAccountIcon } from "./account-icons";
 import { calculateDebtPayment, splitDebtsByArchive, summarizeDebtPlanning, summarizeDebts } from "./debts";
 import { calculateMonthlyPlanningBudget, calculatePlanningForecast } from "./planning";
 import { calculateIncomeAllocation } from "./income-allocation";
+import { formatMoney } from "./money";
 import type { ExpensePlan, IncomePlan, PlannedTransfer } from "../types";
 import { createMonthSummarySnapshot, expenseDeviationPercent } from "./month-summary";
 import { createMonthSummaryWorkbook } from "./month-summary-excel";
@@ -266,4 +267,11 @@ test("локализует вычисляемые подписи на англи
   } finally {
     setFinanceLocale("ru");
   }
+});
+
+test("показывает копейки без округления до целых рублей", () => {
+  assert.equal(formatMoney(125, "ru-RU"), "125");
+  assert.equal(formatMoney(125.5, "ru-RU"), "125,5");
+  assert.equal(formatMoney(125.49, "ru-RU"), "125,49");
+  assert.equal(formatMoney(-0, "ru-RU"), "0");
 });

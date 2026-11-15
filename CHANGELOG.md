@@ -2,6 +2,12 @@
 
 All notable changes to Oxill Finance are documented in this file.
 
+## 1.0.16 — 2026-11-16
+
+- Fixed monetary values being rounded to whole rubles across the main interface.
+- Preserved and displayed kopecks consistently in accounts, operations, debts, planning, and monthly reports.
+- Added regression coverage for localized decimal formatting and negative zero.
+
 ## 1.0.15 — 2026-11-14
 
 - Reworked monthly and yearly planning into responsive expense, transfer, and income-allocation workflows.

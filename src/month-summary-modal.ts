@@ -2,6 +2,7 @@ import { App, Modal, setIcon } from "obsidian";
 
 import { expenseDeviationPercent } from "./core/month-summary";
 import { localeCode, t } from "./i18n";
+import { formatMoney } from "./core/money";
 import type { FinanceMonthSummary } from "./types";
 
 export class MonthSummaryModal extends Modal {
@@ -87,4 +88,4 @@ function periodLabel(period: string): string {
   return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
-function money(value: number): string { return new Intl.NumberFormat(localeCode(), { maximumFractionDigits: 2 }).format(value); }
+function money(value: number): string { return formatMoney(value, localeCode()); }

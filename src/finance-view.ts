@@ -6,6 +6,7 @@ import { splitDebtsByArchive, summarizeDebts } from "./core/debts";
 import { summarizeDebtPlanning } from "./core/debts";
 import { calculateMonthlyPlanningBudget } from "./core/planning";
 import { calculateIncomeAllocation } from "./core/income-allocation";
+import { formatMoney } from "./core/money";
 import { monthPeriod } from "./core/month-summary";
 import { renderAccuracy } from "./month-summary-modal";
 import { TransactionStore } from "./transaction-store";
@@ -1337,7 +1338,7 @@ export class FinanceView extends ItemView {
   }
 }
 
-function money(value: number): string { return new Intl.NumberFormat(localeCode(), { maximumFractionDigits: 0 }).format(value); }
+function money(value: number): string { return formatMoney(value, localeCode()); }
 function dateLabel(date: Date): string { return new Intl.DateTimeFormat(localeCode(), { day: "2-digit", month: "short", year: "numeric" }).format(date); }
 function categoryColors(): string[] {
   return ["#7c6cf2", "#4f8fe8", "#39a58a", "#e5a83e", "#dc6f57", "#a86dd4", "#58a6b3", "#87909a"];
