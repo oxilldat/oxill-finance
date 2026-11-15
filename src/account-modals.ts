@@ -1,6 +1,7 @@
 import { App, Modal, Notice, setIcon, Setting } from "obsidian";
 
 import { DEFAULT_ACCOUNT_ICON, normalizeAccountIcon } from "./core/account-icons";
+import { hasSufficientFunds } from "./core/money";
 import { IconPicker } from "./icon-picker";
 import { TransactionStore } from "./transaction-store";
 import { FinanceAccount } from "./types";
@@ -128,7 +129,7 @@ export class TransferModal extends Modal {
     if (this.fromAccountId === this.toAccountId) return void new Notice(t("Выберите разные счета", "Select different accounts"));
     if (!Number.isFinite(amount) || amount <= 0) return void new Notice(t("Введите сумму больше нуля", "Enter an amount greater than zero"));
     const source = this.store.getAccount(this.fromAccountId);
-    if (!source || amount > source.balance) return void new Notice(t("На счёте недостаточно средств", "Insufficient funds in the account"));
+    if (!source || !hasSufficientFunds(source.balance, amount)) return void new Notice(t("На счёте недостаточно средств", "Insufficient funds in the account"));
     await this.store.createTransfer({
       amount, date: new Date(), fromAccountId: this.fromAccountId, toAccountId: this.toAccountId,
       comment: this.comment.trim() || undefined,

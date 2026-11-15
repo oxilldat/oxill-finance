@@ -2,6 +2,7 @@ import { App, Menu, Modal, Notice, setIcon, Setting } from "obsidian";
 
 import { CategorySuggest } from "./category-suggest";
 import { normalizeAccountIcon } from "./core/account-icons";
+import { hasSufficientFunds } from "./core/money";
 import { TransactionStore } from "./transaction-store";
 import { FinanceAccount } from "./types";
 import { TransactionKind } from "./types";
@@ -121,7 +122,7 @@ export class TransactionModal extends Modal {
     if (!this.accountId || !this.store.getAccount(this.accountId)) return void new Notice(t("Выберите счёт", "Select an account"));
     if (Number.isNaN(date.getTime())) return void new Notice(t("Введите корректную дату", "Enter a valid date"));
     const account = this.accountId ? this.store.getAccount(this.accountId) : undefined;
-    if (this.kind === "expense" && account && amount > account.balance) return void new Notice(t("На счёте недостаточно средств", "Insufficient funds in the account"));
+    if (this.kind === "expense" && account && !hasSufficientFunds(account.balance, amount)) return void new Notice(t("На счёте недостаточно средств", "Insufficient funds in the account"));
     await this.store.createTransaction({
       kind: this.kind,
       amount,

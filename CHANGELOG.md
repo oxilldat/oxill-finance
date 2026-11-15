@@ -2,6 +2,13 @@
 
 All notable changes to Oxill Finance are documented in this file.
 
+## 1.0.17 — 2026-11-16
+
+- Fixed transfers of the exact remaining balance when the account contains kopecks.
+- Switched balance aggregation and sufficiency checks to integer kopecks to avoid floating-point errors.
+- Applied the same precise checks to expenses, planned transfers, account deletion, and related controls.
+- Added regression coverage for the `0.03 − 0.02 = 0.01` case.
+
 ## 1.0.16 — 2026-11-16
 
 - Fixed monetary values being rounded to whole rubles across the main interface.

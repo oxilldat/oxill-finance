@@ -4,6 +4,7 @@ import { ExpensePlan, ExpensePlanCompletion, ExpensePlanStatus, FinanceAccount, 
 import { t } from "./i18n";
 import { normalizeAccountIcon } from "./core/account-icons";
 import { calculateDebtPayment } from "./core/debts";
+import { fromMinorUnits, hasSufficientFunds, isZeroMoney, toMinorUnits } from "./core/money";
 
 type Frontmatter = Record<string, unknown>;
 
@@ -138,7 +139,7 @@ export class TransactionStore {
   }
 
   async deleteAccount(account: FinanceAccount): Promise<void> {
-    if (Math.abs(account.balance) > 0.005) throw new Error(t("Сначала переведите все средства на другой счёт", "Transfer all funds to another account first"));
+    if (!isZeroMoney(account.balance)) throw new Error(t("Сначала переведите все средства на другой счёт", "Transfer all funds to another account first"));
     await this.app.fileManager.trashFile(account.file);
   }
 
@@ -230,7 +231,7 @@ export class TransactionStore {
       const debt = this.validateDebtPayment(plan.debtId, plan.amount, "expense");
       if (plan.completion === "create-expense") {
         const account = plan.accountId ? this.getAccount(plan.accountId) : undefined;
-        if (account && plan.amount > account.balance) throw new Error(t("На выбранном счёте недостаточно средств", "Insufficient funds in the selected account"));
+        if (account && !hasSufficientFunds(account.balance, plan.amount)) throw new Error(t("На выбранном счёте недостаточно средств", "Insufficient funds in the selected account"));
         await this.createTransaction({
           kind: "expense", amount: plan.amount, date: new Date(), category: plan.category,
           comment: `${t("План", "Plan")}: ${plan.title}`, accountId: plan.accountId, debtId: plan.debtId,
@@ -351,7 +352,7 @@ export class TransactionStore {
     plan.status = "paid";
     try {
       const source = this.getAccount(plan.fromAccountId);
-      if (!source || plan.amount > source.balance) throw new Error(t("На счёте недостаточно средств", "Insufficient funds in the account"));
+      if (!source || !hasSufficientFunds(source.balance, plan.amount)) throw new Error(t("На счёте недостаточно средств", "Insufficient funds in the account"));
       await this.createTransfer({ amount: plan.amount, date: new Date(), fromAccountId: plan.fromAccountId, toAccountId: plan.toAccountId, comment: t("Плановый перевод", "Planned transfer") });
       await this.app.fileManager.processFrontMatter(plan.file, (data) => {
         setFrontmatterValue(data, "status", "paid");
@@ -503,17 +504,19 @@ export function readFinanceIndex(app: App): FinanceIndex {
   debts.sort((left, right) => left.name.localeCompare(right.name, "ru"));
   monthSummaries.sort((left, right) => right.period.localeCompare(left.period));
   const accountMap = new Map(accounts.map((account) => [account.id, account]));
+  const accountBalances = new Map(accounts.map((account) => [account.id, 0]));
   for (const transaction of transactions) {
     if (!transaction.accountId) continue;
-    const account = accountMap.get(transaction.accountId);
-    if (account) account.balance += transaction.kind === "income" ? transaction.amount : -transaction.amount;
+    if (!accountMap.has(transaction.accountId)) continue;
+    const delta = toMinorUnits(transaction.amount) * (transaction.kind === "income" ? 1 : -1);
+    accountBalances.set(transaction.accountId, (accountBalances.get(transaction.accountId) ?? 0) + delta);
   }
   for (const transfer of transfers) {
-    const from = accountMap.get(transfer.fromAccountId);
-    const to = accountMap.get(transfer.toAccountId);
-    if (from) from.balance -= transfer.amount;
-    if (to) to.balance += transfer.amount;
+    const amount = toMinorUnits(transfer.amount);
+    if (accountMap.has(transfer.fromAccountId)) accountBalances.set(transfer.fromAccountId, (accountBalances.get(transfer.fromAccountId) ?? 0) - amount);
+    if (accountMap.has(transfer.toAccountId)) accountBalances.set(transfer.toAccountId, (accountBalances.get(transfer.toAccountId) ?? 0) + amount);
   }
+  for (const account of accounts) account.balance = fromMinorUnits(accountBalances.get(account.id) ?? 0);
   accounts.sort((left, right) => {
     const orderDifference = (left.order ?? Number.MAX_SAFE_INTEGER) - (right.order ?? Number.MAX_SAFE_INTEGER);
     return orderDifference || left.name.localeCompare(right.name, "ru");

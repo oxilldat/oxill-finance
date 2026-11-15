@@ -6,7 +6,7 @@ import { splitDebtsByArchive, summarizeDebts } from "./core/debts";
 import { summarizeDebtPlanning } from "./core/debts";
 import { calculateMonthlyPlanningBudget } from "./core/planning";
 import { calculateIncomeAllocation } from "./core/income-allocation";
-import { formatMoney } from "./core/money";
+import { formatMoney, isZeroMoney, toMinorUnits } from "./core/money";
 import { monthPeriod } from "./core/month-summary";
 import { renderAccuracy } from "./month-summary-modal";
 import { TransactionStore } from "./transaction-store";
@@ -1205,7 +1205,7 @@ export class FinanceView extends ItemView {
     this.renderAccountCategoryChart(card, account.id);
     const footer = card.createDiv({ cls: "oxf-account-card-footer" });
     const transfer = footer.createEl("button", { cls: "oxf-account-transfer", text: t("Перевести", "Transfer"), attr: { type: "button" } });
-    transfer.disabled = accounts.length < 2 || account.balance <= 0;
+    transfer.disabled = accounts.length < 2 || toMinorUnits(account.balance) <= 0;
     transfer.addEventListener("click", () => this.actions.transfer(account.id));
     const more = footer.createEl("button", { cls: "oxf-account-more", text: "•••", attr: { type: "button", "aria-label": t(`Действия со счётом ${account.name}`, `Actions for account ${account.name}`) } });
     more.addEventListener("click", (event) => this.showAccountMenu(event, account));
@@ -1299,7 +1299,7 @@ export class FinanceView extends ItemView {
     menu.addSeparator();
     menu.addItem((item) => {
       item.setTitle(t("Удалить счёт", "Delete account")).setIcon("trash-2");
-      if (Math.abs(account.balance) > 0.005) item.setDisabled(true);
+      if (!isZeroMoney(account.balance)) item.setDisabled(true);
       item.onClick(() => this.actions.deleteAccount(account));
     });
     menu.showAtMouseEvent(event);

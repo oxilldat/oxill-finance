@@ -10,7 +10,7 @@ import { normalizeAccountIcon } from "./account-icons";
 import { calculateDebtPayment, splitDebtsByArchive, summarizeDebtPlanning, summarizeDebts } from "./debts";
 import { calculateMonthlyPlanningBudget, calculatePlanningForecast } from "./planning";
 import { calculateIncomeAllocation } from "./income-allocation";
-import { formatMoney } from "./money";
+import { formatMoney, fromMinorUnits, hasSufficientFunds, toMinorUnits } from "./money";
 import type { ExpensePlan, IncomePlan, PlannedTransfer } from "../types";
 import { createMonthSummarySnapshot, expenseDeviationPercent } from "./month-summary";
 import { createMonthSummaryWorkbook } from "./month-summary-excel";
@@ -274,4 +274,12 @@ test("показывает копейки без округления до це�
   assert.equal(formatMoney(125.5, "ru-RU"), "125,5");
   assert.equal(formatMoney(125.49, "ru-RU"), "125,49");
   assert.equal(formatMoney(-0, "ru-RU"), "0");
+});
+
+test("сравнивает остаток и перевод в целых копейках", () => {
+  const floatingBalance = 0.03 - 0.02;
+
+  assert.equal(hasSufficientFunds(floatingBalance, 0.01), true);
+  assert.equal(hasSufficientFunds(floatingBalance, 0.02), false);
+  assert.equal(fromMinorUnits(toMinorUnits(floatingBalance)), 0.01);
 });

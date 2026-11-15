@@ -20,6 +20,7 @@ import { PersonNetworkConnector } from "./person-network-connector";
 import { DebtPlanModal } from "./debt-plan-modal";
 import { summarizeDebtPlanning } from "./core/debts";
 import { addCustomCategory as appendCustomCategory } from "./core/categories";
+import { isZeroMoney } from "./core/money";
 
 export default class OxillFinancePlugin extends Plugin {
   private store!: TransactionStore;
@@ -133,7 +134,7 @@ export default class OxillFinancePlugin extends Plugin {
       new Notice(t("Сначала выберите другой счёт по умолчанию в настройках", "Choose another default account in settings first"));
       return;
     }
-    if (Math.abs(account.balance) > 0.005) {
+    if (!isZeroMoney(account.balance)) {
       new Notice(t("Сначала переведите все средства на другой счёт", "Transfer all funds to another account first"));
       return;
     }
