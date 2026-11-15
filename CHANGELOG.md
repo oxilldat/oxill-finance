@@ -2,6 +2,14 @@
 
 All notable changes to Oxill Finance are documented in this file.
 
+## 1.0.18 — 2026-11-16
+
+- Added editable date and time to account transfers.
+- Added edit and delete actions to recent transactions through the right-click context menu.
+- Added confirmation before moving an operation note to the vault trash.
+- Added pagination to recent transactions with 20 operations per page.
+- Kept account balance validation accurate while editing existing expenses and transfers.
+
 ## 1.0.17 — 2026-11-16
 
 - Fixed transfers of the exact remaining balance when the account contains kopecks.

@@ -10,7 +10,7 @@ import { formatMoney, isZeroMoney, toMinorUnits } from "./core/money";
 import { monthPeriod } from "./core/month-summary";
 import { renderAccuracy } from "./month-summary-modal";
 import { TransactionStore } from "./transaction-store";
-import { ExpensePlan, FinanceAccount, FinanceDebt, FinanceMonthSummary, FinanceSummary, FinanceTransaction, IncomePlan, PeriodKind, PlannedTransfer, TransactionKind } from "./types";
+import { ExpensePlan, FinanceAccount, FinanceDebt, FinanceMonthSummary, FinanceSummary, FinanceTransaction, FinanceTransfer, IncomePlan, PeriodKind, PlannedTransfer, TransactionKind } from "./types";
 import { localeCode, t } from "./i18n";
 import { ConnectedPerson } from "./person-network-connector";
 
@@ -24,9 +24,12 @@ type RecentOperation = {
   title: string;
   subtitle: string;
   file: FinanceTransaction["file"];
+  source: FinanceTransaction | FinanceTransfer;
 };
 export interface FinanceViewActions {
   openTransaction: (kind: TransactionKind, accountId?: string) => void;
+  editOperation: (operation: FinanceTransaction | FinanceTransfer) => void;
+  deleteOperation: (operation: FinanceTransaction | FinanceTransfer) => void;
   createAccount: () => void;
   editAccount: (account: FinanceAccount) => void;
   transfer: (accountId?: string) => void;
@@ -92,6 +95,7 @@ export class FinanceView extends ItemView {
   private incomeAllocationPeriod?: string;
   private draggedAccountId?: string;
   private activeSection: NavigationItem = "overview";
+  private recentOperationsPage = 0;
   private debtArchiveOpen = false;
   private unsubscribe?: () => void;
   private resizeObserver?: ResizeObserver;
@@ -247,6 +251,7 @@ export class FinanceView extends ItemView {
         this.calendarStart = undefined;
         this.calendarOpen = false;
         this.anchorDate = new Date();
+        this.recentOperationsPage = 0;
         this.render();
         return;
       }
@@ -268,6 +273,7 @@ export class FinanceView extends ItemView {
     this.anchorDate = new Date();
     this.customRange = undefined;
     this.calendarOpen = false;
+    this.recentOperationsPage = 0;
     this.render();
   }
 
@@ -318,6 +324,7 @@ export class FinanceView extends ItemView {
     const start = date < this.calendarStart ? date : this.calendarStart;
     const endDate = date < this.calendarStart ? this.calendarStart : date;
     this.customRange = { start: startOfDay(start), end: endOfDay(endDate) };
+    this.recentOperationsPage = 0;
     this.calendarStart = undefined;
     this.calendarOpen = false;
     this.render();
@@ -340,6 +347,7 @@ export class FinanceView extends ItemView {
         title: transaction.comment?.trim() || t("Без комментария", "No comment"),
         subtitle: transaction.category,
         file: transaction.file,
+        source: transaction,
       })),
       ...index.transfers
         .filter((transfer) => transfer.date >= range.start && transfer.date <= range.end)
@@ -350,8 +358,9 @@ export class FinanceView extends ItemView {
           title: transfer.comment?.trim() || t("Перевод между счетами", "Account transfer"),
           subtitle: `${accountNames.get(transfer.fromAccountId) ?? t("Неизвестный счёт", "Unknown account")} → ${accountNames.get(transfer.toAccountId) ?? t("Неизвестный счёт", "Unknown account")}`,
           file: transfer.file,
+          source: transfer,
         })),
-    ].sort((left, right) => right.date.getTime() - left.date.getTime()).slice(0, 20);
+    ].sort((left, right) => right.date.getTime() - left.date.getTime());
     this.renderRecentOperations(operations, recentOperations);
   }
 
@@ -1310,12 +1319,28 @@ export class FinanceView extends ItemView {
     const heading = card.createDiv({ cls: "oxf-history-heading" });
     heading.createEl("strong", { text: t("Последние операции", "Recent transactions") });
     if (operations.length === 0) return void card.createEl("p", { cls: "oxf-empty", text: t("За выбранный период операций нет.", "There are no transactions in the selected period.") });
+    const pageSize = 20;
+    const pageCount = Math.ceil(operations.length / pageSize);
+    this.recentOperationsPage = Math.min(this.recentOperationsPage, pageCount - 1);
+    if (pageCount > 1) {
+      const pagination = heading.createDiv({ cls: "oxf-history-pagination" });
+      const previous = pagination.createEl("button", { attr: { type: "button", "aria-label": t("Предыдущая страница", "Previous page") } });
+      setIcon(previous, "chevron-left");
+      previous.disabled = this.recentOperationsPage === 0;
+      previous.addEventListener("click", () => { this.recentOperationsPage -= 1; this.render(); });
+      pagination.createSpan({ text: `${this.recentOperationsPage + 1} / ${pageCount}` });
+      const next = pagination.createEl("button", { attr: { type: "button", "aria-label": t("Следующая страница", "Next page") } });
+      setIcon(next, "chevron-right");
+      next.disabled = this.recentOperationsPage >= pageCount - 1;
+      next.addEventListener("click", () => { this.recentOperationsPage += 1; this.render(); });
+    }
     const columns = card.createDiv({ cls: "oxf-history-columns" });
     columns.createSpan({ text: t("Комментарий", "Comment") });
     columns.createSpan({ text: t("Дата", "Date") });
     columns.createSpan({ text: t("Сумма", "Amount") });
     const list = card.createDiv({ cls: "oxf-history-list" });
-    for (const operation of operations) {
+    const pageStart = this.recentOperationsPage * pageSize;
+    for (const operation of operations.slice(pageStart, pageStart + pageSize)) {
       const row = list.createEl("button", { cls: "oxf-history-row", attr: { type: "button" } });
       const name = row.createDiv();
       const title = name.createDiv({ cls: "oxf-operation-title" });
@@ -1326,6 +1351,16 @@ export class FinanceView extends ItemView {
       const prefix = operation.kind === "income" ? "+" : operation.kind === "expense" ? "−" : "→";
       row.createEl("b", { cls: `is-${operation.kind}`, text: `${prefix}${money(operation.amount)} ₽` });
       row.addEventListener("click", () => void this.app.workspace.getLeaf(false).openFile(operation.file));
+      row.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
+        const menu = new Menu();
+        menu.addItem((item) => item.setTitle(t("Изменить", "Edit")).setIcon("pencil")
+          .onClick(() => this.actions.editOperation(operation.source)));
+        menu.addSeparator();
+        menu.addItem((item) => item.setTitle(t("Удалить", "Delete")).setIcon("trash-2")
+          .onClick(() => this.actions.deleteOperation(operation.source)));
+        menu.showAtMouseEvent(event);
+      });
     }
   }
 

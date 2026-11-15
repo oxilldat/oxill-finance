@@ -21,6 +21,7 @@ import { DebtPlanModal } from "./debt-plan-modal";
 import { summarizeDebtPlanning } from "./core/debts";
 import { addCustomCategory as appendCustomCategory } from "./core/categories";
 import { isZeroMoney } from "./core/money";
+import { DeleteOperationModal } from "./delete-operation-modal";
 
 export default class OxillFinancePlugin extends Plugin {
   private store!: TransactionStore;
@@ -68,6 +69,14 @@ export default class OxillFinancePlugin extends Plugin {
   private financeActions(): FinanceViewActions {
     return {
       openTransaction: (kind, accountId) => this.openTransactionModal(kind, accountId),
+      editOperation: (operation) => {
+        if ("kind" in operation) {
+          new TransactionModal(this.app, operation.kind, this.store, () => this.scheduleRefresh(120), operation.accountId, () => this.getTransactionCategories(operation.kind), operation).open();
+        } else {
+          new TransferModal(this.app, this.store, () => this.scheduleRefresh(120), operation.fromAccountId, operation).open();
+        }
+      },
+      deleteOperation: (operation) => new DeleteOperationModal(this.app, this.store, operation, () => this.scheduleRefresh(120)).open(),
       createAccount: () => new AccountModal(this.app, this.store, () => this.scheduleRefresh(120)).open(),
       editAccount: (account) => new AccountModal(this.app, this.store, () => this.scheduleRefresh(120), account).open(),
       transfer: (accountId) => new TransferModal(this.app, this.store, () => this.scheduleRefresh(120), accountId).open(),

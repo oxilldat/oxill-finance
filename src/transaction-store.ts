@@ -116,6 +116,19 @@ export class TransactionStore {
     return createdPath;
   }
 
+  async updateTransaction(transaction: FinanceTransaction, input: NewTransaction): Promise<void> {
+    await this.app.fileManager.processFrontMatter(transaction.file, (data) => {
+      setFrontmatterValue(data, "operation", input.kind);
+      setFrontmatterValue(data, "amount", input.amount);
+      setFrontmatterValue(data, "date", input.date.toISOString());
+      setFrontmatterValue(data, "category", input.category);
+      if (input.accountId) setFrontmatterValue(data, "account_id", input.accountId);
+      else deleteFrontmatterValue(data, "account_id");
+      if (input.comment) setFrontmatterValue(data, "comment", input.comment);
+      else deleteFrontmatterValue(data, "comment");
+    });
+  }
+
   async createAccount(input: NewAccount): Promise<string> {
     const folder = this.getFolders().accounts;
     await ensureFolder(this.app, folder);
@@ -177,6 +190,21 @@ export class TransactionStore {
     const createdPath = await availablePath(this.app, path);
     await this.app.vault.create(createdPath, content);
     return createdPath;
+  }
+
+  async updateTransfer(transfer: FinanceTransfer, input: NewTransfer): Promise<void> {
+    await this.app.fileManager.processFrontMatter(transfer.file, (data) => {
+      setFrontmatterValue(data, "amount", input.amount);
+      setFrontmatterValue(data, "date", input.date.toISOString());
+      setFrontmatterValue(data, "from_account", input.fromAccountId);
+      setFrontmatterValue(data, "to_account", input.toAccountId);
+      if (input.comment) setFrontmatterValue(data, "comment", input.comment);
+      else deleteFrontmatterValue(data, "comment");
+    });
+  }
+
+  async deleteOperation(operation: FinanceTransaction | FinanceTransfer): Promise<void> {
+    await this.app.fileManager.trashFile(operation.file);
   }
 
   async createExpensePlan(input: NewExpensePlan): Promise<string> {

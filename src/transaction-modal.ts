@@ -4,7 +4,7 @@ import { CategorySuggest } from "./category-suggest";
 import { normalizeAccountIcon } from "./core/account-icons";
 import { hasSufficientFunds } from "./core/money";
 import { TransactionStore } from "./transaction-store";
-import { FinanceAccount } from "./types";
+import { FinanceAccount, FinanceTransaction } from "./types";
 import { TransactionKind } from "./types";
 import { t } from "./i18n";
 
@@ -25,27 +25,34 @@ export class TransactionModal extends Modal {
     private readonly afterSave: () => void,
     initialAccountId?: string,
     private readonly categories: () => readonly string[] = () => [],
+    private readonly transaction?: FinanceTransaction,
   ) {
     super(app);
-    this.accountId = initialAccountId && store.getAccount(initialAccountId)
+    this.amount = transaction ? String(transaction.amount) : "";
+    this.category = transaction?.category ?? "";
+    this.comment = transaction?.comment ?? "";
+    this.date = localDateValue(transaction?.date ?? new Date());
+    this.accountId = transaction?.accountId ?? (initialAccountId && store.getAccount(initialAccountId)
       ? initialAccountId
-      : store.getIndex().accounts[0]?.id ?? "";
+      : store.getIndex().accounts[0]?.id ?? "");
   }
 
   onOpen(): void {
     this.modalEl.addClass("oxf-transaction-modal");
-    this.contentEl.createEl("h2", { text: this.kind === "income" ? t("Добавить доход", "Add income") : t("Добавить расход", "Add expense") });
+    this.contentEl.createEl("h2", { text: this.transaction
+      ? (this.kind === "income" ? t("Изменить доход", "Edit income") : t("Изменить расход", "Edit expense"))
+      : (this.kind === "income" ? t("Добавить доход", "Add income") : t("Добавить расход", "Add expense")) });
     new Setting(this.contentEl).setName(t("Комментарий", "Comment")).addText((text) =>
-      text.setPlaceholder(t("Необязательно", "Optional")).onChange((value) => { this.comment = value; }));
+      text.setPlaceholder(t("Необязательно", "Optional")).setValue(this.comment).onChange((value) => { this.comment = value; }));
     new Setting(this.contentEl).setName(t("Сумма", "Amount")).addText((text) => {
       text.inputEl.type = "number";
       text.inputEl.min = "0.01";
       text.inputEl.step = "0.01";
-      text.setPlaceholder("0").onChange((value) => { this.amount = value; });
+      text.setPlaceholder("0").setValue(this.amount).onChange((value) => { this.amount = value; });
     });
     new Setting(this.contentEl).setName(t("Категория", "Category")).addText((text) => {
       text.inputEl.addClass("oxf-transaction-category-input");
-      text.setPlaceholder(this.kind === "income" ? t("Зарплата", "Salary") : t("Продукты", "Groceries")).onChange((value) => { this.category = value; });
+      text.setPlaceholder(this.kind === "income" ? t("Зарплата", "Salary") : t("Продукты", "Groceries")).setValue(this.category).onChange((value) => { this.category = value; });
       this.categorySuggest = new CategorySuggest(this.app, text.inputEl, this.categories, (category) => {
         this.category = category;
         text.setValue(category);
@@ -122,17 +129,23 @@ export class TransactionModal extends Modal {
     if (!this.accountId || !this.store.getAccount(this.accountId)) return void new Notice(t("Выберите счёт", "Select an account"));
     if (Number.isNaN(date.getTime())) return void new Notice(t("Введите корректную дату", "Enter a valid date"));
     const account = this.accountId ? this.store.getAccount(this.accountId) : undefined;
-    if (this.kind === "expense" && account && !hasSufficientFunds(account.balance, amount)) return void new Notice(t("На счёте недостаточно средств", "Insufficient funds in the account"));
-    await this.store.createTransaction({
+    const availableBalance = account?.balance ?? 0;
+    const restoredBalance = this.transaction?.kind === "expense" && this.transaction.accountId === this.accountId
+      ? availableBalance + this.transaction.amount
+      : availableBalance;
+    if (this.kind === "expense" && account && !hasSufficientFunds(restoredBalance, amount)) return void new Notice(t("На счёте недостаточно средств", "Insufficient funds in the account"));
+    const input = {
       kind: this.kind,
       amount,
       date,
       category: this.category.trim(),
       comment: this.comment.trim() || undefined,
       accountId: this.accountId || undefined,
-    });
+    };
+    if (this.transaction) await this.store.updateTransaction(this.transaction, input);
+    else await this.store.createTransaction(input);
     this.afterSave();
-    new Notice(t("Финансовая заметка создана", "Finance note created"));
+    new Notice(this.transaction ? t("Операция обновлена", "Transaction updated") : t("Финансовая заметка создана", "Finance note created"));
     this.close();
   }
 }

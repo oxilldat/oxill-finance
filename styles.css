@@ -71,6 +71,11 @@
 .oxf-history-heading { padding:17px 18px; border-bottom:1px solid var(--oxf-line); }
 .oxf-history-heading>div { display:flex; gap:7px; }
 .oxf-history-heading button { height:30px; padding:0 11px; color:var(--oxf-accent); border:1px solid var(--oxf-soft-border); border-radius:8px; background:var(--oxf-soft); box-shadow:none; font-size:10px; cursor:pointer; }
+.oxf-history-pagination { display:flex; align-items:center; gap:7px; }
+.oxf-history-pagination span { min-width:42px; color:var(--oxf-muted); font-size:10px; font-variant-numeric:tabular-nums; text-align:center; }
+.oxf-history-pagination button { display:grid; width:30px; padding:0; place-items:center; }
+.oxf-history-pagination button:disabled { opacity:.4; cursor:default; }
+.oxf-history-pagination svg { width:14px; height:14px; }
 .oxf-history-columns { display:grid; grid-template-columns:minmax(0,1fr) 140px 140px; gap:18px; align-items:center; padding:9px 18px; color:var(--oxf-muted); border-bottom:1px solid var(--oxf-line); background:var(--oxf-soft); font-size:11px; }
 .oxf-history-columns span:nth-child(2) { text-align:center; }
 .oxf-history-columns span:last-child { text-align:right; }

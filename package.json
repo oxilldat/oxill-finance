@@ -1,6 +1,6 @@
 {
   "name": "oxill-finance",
-  "version": "1.0.17",
+  "version": "1.0.18",
   "description": "Local-first personal finance planning for Obsidian using Markdown notes.",
   "private": true,
   "type": "module",
