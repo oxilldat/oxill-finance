@@ -2,6 +2,7 @@ import type { TFile } from "obsidian";
 
 export type TransactionKind = "income" | "expense";
 export type PeriodKind = "day" | "week" | "month" | "quarter" | "half-year" | "year";
+export type AccountKind = "envelope" | "savings";
 
 export interface FinanceTransaction {
   id: string;
@@ -20,6 +21,7 @@ export interface FinanceAccount {
   id: string;
   name: string;
   icon: string;
+  kind: AccountKind;
   order?: number;
   balance: number;
   file: TFile;

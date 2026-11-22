@@ -4,6 +4,8 @@ import type OxillFinancePlugin from "./main";
 import authorAvatar from "../assets/ava.jpg";
 import { FolderSuggest } from "./folder-suggest";
 import { FinanceLocale, setFinanceLocale, t } from "./i18n";
+import { normalizeAccountIcon } from "./core/account-icons";
+import { SelectMenu } from "./select-menu";
 
 export interface OxillFinanceSettings {
   selectedCategories: string[];
@@ -86,16 +88,20 @@ export class FinanceSettingTab extends PluginSettingTab {
             name: t("Язык", "Language"),
             desc: t("Язык интерфейса Oxill Finance.", "Oxill Finance interface language."),
             render: (setting) => {
-              setting.addDropdown((dropdown) => dropdown
-                .addOption("ru", "Русский")
-                .addOption("en", "English")
-                .setValue(this.plugin.settings.language)
-                .onChange(async (value) => {
+              new SelectMenu(
+                setting,
+                [
+                  { value: "ru", label: "Русский", icon: "languages" },
+                  { value: "en", label: "English", icon: "languages" },
+                ],
+                this.plugin.settings.language,
+                async (value) => {
                   this.plugin.settings.language = value === "en" ? "en" : "ru";
                   setFinanceLocale(this.plugin.settings.language);
                   await this.plugin.saveFinanceSettings();
                   this.update();
-                }));
+                },
+              );
             },
           },
           {
@@ -115,17 +121,16 @@ export class FinanceSettingTab extends PluginSettingTab {
             desc: t("Автоматически выбирать этот счёт для новых доходов и расходов. Такой счёт нельзя удалить.", "Select this account automatically for new income and expenses. The default account cannot be deleted."),
             render: (setting) => {
               const accounts = this.plugin.getAccounts();
-              setting.addDropdown((dropdown) => {
-                if (accounts.length === 0) dropdown.addOption("", t("Сначала создайте счёт", "Create an account first"));
-                for (const account of accounts) dropdown.addOption(account.id, account.name);
-                dropdown
-                  .setValue(accounts.some((account) => account.id === this.plugin.settings.defaultAccountId) ? this.plugin.settings.defaultAccountId : accounts[0]?.id ?? "")
-                  .setDisabled(accounts.length === 0)
-                  .onChange(async (value) => {
+              new SelectMenu(
+                setting,
+                accounts.map((account) => ({ value: account.id, label: account.name, icon: normalizeAccountIcon(account.icon) })),
+                accounts.some((account) => account.id === this.plugin.settings.defaultAccountId) ? this.plugin.settings.defaultAccountId : accounts[0]?.id ?? "",
+                async (value) => {
                     this.plugin.settings.defaultAccountId = value;
                     await this.plugin.saveFinanceSettings();
-                  });
-              });
+                },
+                t("Сначала создайте счёт", "Create an account first"),
+              );
             },
           },
           {
@@ -451,6 +456,7 @@ class RefreshableSettingsModal extends Modal {
 
 class DeleteCategoryModal extends Modal {
   private target: string;
+  private targetSelect?: SelectMenu;
 
   constructor(
     app: App,
@@ -470,20 +476,20 @@ class DeleteCategoryModal extends Modal {
         `All notes in “${this.category}” will be moved to the selected category.`,
       ),
     });
-    new Setting(this.contentEl)
+    this.targetSelect = new SelectMenu(new Setting(this.contentEl)
       .setName(t("Перенести в", "Move to"))
-      .setDesc(t("Удаление без переноса невозможно.", "A category cannot be deleted without moving its notes."))
-      .addDropdown((dropdown) => {
-        for (const target of this.targets) dropdown.addOption(target, target);
-        dropdown.setValue(this.target).onChange((value) => { this.target = value; });
-      });
+      .setDesc(t("Удаление без переноса невозможно.", "A category cannot be deleted without moving its notes.")),
+      this.targets.map((target) => ({ value: target, label: target, icon: "tag" })),
+      this.target,
+      (value) => { this.target = value; },
+    );
     const actions = this.contentEl.createDiv({ cls: "oxf-modal-actions" });
     actions.createEl("button", { text: t("Отмена", "Cancel") }).addEventListener("click", () => this.close());
     actions.createEl("button", { cls: "mod-warning", text: t("Перенести и удалить", "Move and delete") })
       .addEventListener("click", () => void this.confirm());
   }
 
-  onClose(): void { this.contentEl.empty(); }
+  onClose(): void { this.targetSelect?.destroy(); this.contentEl.empty(); }
 
   private async confirm(): Promise<void> {
     try {

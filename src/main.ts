@@ -21,6 +21,8 @@ import { DebtPlanModal } from "./debt-plan-modal";
 import { summarizeDebtPlanning } from "./core/debts";
 import { addCustomCategory as appendCustomCategory } from "./core/categories";
 import { isZeroMoney } from "./core/money";
+import { CopyExpensePlansModal } from "./copy-expense-plans-modal";
+import { CopyPlannedTransfersModal } from "./copy-planned-transfers-modal";
 import { DeleteOperationModal } from "./delete-operation-modal";
 
 export default class OxillFinancePlugin extends Plugin {
@@ -44,7 +46,7 @@ export default class OxillFinancePlugin extends Plugin {
     this.addCommand({ id: "add-expense-plan", name: t("Запланировать расход", "Plan expense"), callback: () =>
       new ExpensePlanModal(this.app, this.store, () => this.scheduleRefresh(120), undefined, undefined, () => this.getAvailableCategories()).open() });
     this.addCommand({ id: "add-income-plan", name: t("Запланировать доход", "Plan income"), callback: () =>
-      new IncomePlanModal(this.app, this.store, () => this.scheduleRefresh(120)).open() });
+      new IncomePlanModal(this.app, this.store, () => this.scheduleRefresh(120), undefined, () => this.getTransactionCategories("income")).open() });
     this.addCommand({ id: "export-excel", name: t("Экспортировать данные в Excel", "Export data to Excel"), callback: () => this.exportFinanceExcel(false) });
     this.addCommand({ id: "import-excel", name: t("Импортировать данные из Excel", "Import data from Excel"), callback: () => this.openExcelImport() });
     this.addCommand({ id: "download-excel-template", name: t("Скачать шаблон Excel", "Download Excel template"), callback: () => this.exportFinanceExcel(true) });
@@ -95,14 +97,22 @@ export default class OxillFinancePlugin extends Plugin {
       setDebtArchived: (debt, archived) => void this.setDebtArchived(debt, archived),
       planDebtPayment: (direction, debtId) => this.openDebtPlanModal(direction, debtId),
       createPlan: (category, dueDate, fundedByIncomePlanId) => new ExpensePlanModal(this.app, this.store, () => this.scheduleRefresh(120), undefined, { category, dueDate, fundedByIncomePlanId }, () => this.getAvailableCategories()).open(),
+      copyExpensePlansToNextMonth: (plans, year, month) => {
+        const target = new Date(year, month + 1, 1);
+        new CopyExpensePlansModal(this.app, plans, target, (selected) => this.copyExpensePlansToNextMonth(selected, year, month)).open();
+      },
       editPlan: (plan) => new ExpensePlanModal(this.app, this.store, () => this.scheduleRefresh(120), plan, undefined, () => this.getAvailableCategories()).open(),
       deletePlan: (plan) => new DeleteExpensePlanModal(this.app, this.store, plan, () => this.scheduleRefresh(120)).open(),
       completePlan: (plan) => void this.completePlan(plan),
-      createIncomePlan: () => new IncomePlanModal(this.app, this.store, () => this.scheduleRefresh(120)).open(),
-      editIncomePlan: (plan) => new IncomePlanModal(this.app, this.store, () => this.scheduleRefresh(120), plan).open(),
+      createIncomePlan: () => new IncomePlanModal(this.app, this.store, () => this.scheduleRefresh(120), undefined, () => this.getTransactionCategories("income")).open(),
+      editIncomePlan: (plan) => new IncomePlanModal(this.app, this.store, () => this.scheduleRefresh(120), plan, () => this.getTransactionCategories("income")).open(),
       deleteIncomePlan: (plan) => new DeleteIncomePlanModal(this.app, this.store, plan, () => this.scheduleRefresh(120)).open(),
       completeIncomePlan: (plan) => void this.completeIncomePlan(plan),
       createPlannedTransfer: (dueDate, fundedByIncomePlanId) => new PlannedTransferModal(this.app, this.store, () => this.scheduleRefresh(120), undefined, { dueDate, fundedByIncomePlanId }).open(),
+      copyPlannedTransfersToNextMonth: (plans, year, month) => {
+        const target = new Date(year, month + 1, 1);
+        new CopyPlannedTransfersModal(this.app, plans, this.store.getIndex().accounts, target, (selected) => this.copyPlannedTransfersToNextMonth(selected, year, month)).open();
+      },
       editPlannedTransfer: (plan) => new PlannedTransferModal(this.app, this.store, () => this.scheduleRefresh(120), plan).open(),
       deletePlannedTransfer: (plan) => new DeletePlannedTransferModal(this.app, this.store, plan, () => this.scheduleRefresh(120)).open(),
       completePlannedTransfer: (plan) => void this.completePlannedTransfer(plan),
@@ -115,6 +125,34 @@ export default class OxillFinancePlugin extends Plugin {
       hiddenPlanningCategories: () => this.settings.hiddenPlanningCategories,
       connectedPerson: (path) => this.settings.personNetworkConnectorEnabled ? this.personNetwork.getPerson(path) : undefined,
     };
+  }
+
+  private async copyExpensePlansToNextMonth(plans: ExpensePlan[], year: number, month: number): Promise<void> {
+    const target = new Date(year, month + 1, 1);
+    try {
+      const result = await this.store.copyExpensePlansToMonth(plans, target.getFullYear(), target.getMonth());
+      this.scheduleRefresh(120);
+      const targetLabel = new Intl.DateTimeFormat(this.settings.language === "en" ? "en-US" : "ru-RU", { month: "long", year: "numeric" }).format(target);
+      new Notice(result.skipped > 0
+        ? t(`Скопировано: ${result.copied}. Пропущено дубликатов: ${result.skipped}. ${targetLabel}`, `Copied: ${result.copied}. Duplicates skipped: ${result.skipped}. ${targetLabel}`)
+        : t(`Скопировано расходов: ${result.copied}. ${targetLabel}`, `Expenses copied: ${result.copied}. ${targetLabel}`));
+    } catch (error) {
+      new Notice(error instanceof Error ? error.message : t("Не удалось скопировать расходы", "Could not copy expenses"));
+    }
+  }
+
+  private async copyPlannedTransfersToNextMonth(plans: PlannedTransfer[], year: number, month: number): Promise<void> {
+    const target = new Date(year, month + 1, 1);
+    try {
+      const result = await this.store.copyPlannedTransfersToMonth(plans, target.getFullYear(), target.getMonth());
+      this.scheduleRefresh(120);
+      const targetLabel = new Intl.DateTimeFormat(this.settings.language === "en" ? "en-US" : "ru-RU", { month: "long", year: "numeric" }).format(target);
+      new Notice(result.skipped > 0
+        ? t(`Скопировано: ${result.copied}. Пропущено дубликатов: ${result.skipped}. ${targetLabel}`, `Copied: ${result.copied}. Duplicates skipped: ${result.skipped}. ${targetLabel}`)
+        : t(`Скопировано переводов: ${result.copied}. ${targetLabel}`, `Transfers copied: ${result.copied}. ${targetLabel}`));
+    } catch (error) {
+      new Notice(error instanceof Error ? error.message : t("Не удалось скопировать переводы", "Could not copy transfers"));
+    }
   }
 
   private openTransactionModal(kind: TransactionKind, accountId?: string): void {

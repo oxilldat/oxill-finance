@@ -2,6 +2,15 @@
 
 All notable changes to Oxill Finance are documented in this file.
 
+## 1.0.19 — 2026-11-22
+
+- Split accounts into everyday envelopes and savings accounts, with compact savings rows and independent drag ordering.
+- Added native date and date-time controls to finance operations and every planning form.
+- Added selective copying of planned expenses and transfers into the next month, with duplicate protection.
+- Added category suggestions to planned income and improved planning filter reset behavior.
+- Replaced native dropdowns across forms and settings with consistent icon-aware Obsidian menus.
+- Made accounts mandatory for planned income and expenses and removed the no-account option.
+
 ## 1.0.18 — 2026-11-16
 
 - Added editable date and time to account transfers.

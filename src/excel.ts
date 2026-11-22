@@ -42,8 +42,8 @@ export function createFinanceWorkbook(index: FinanceIndex, categories: string[],
   appendSheet(book, SHEETS.operations, operationRows, [18, 12, 14, 20, 20, 20, 20, 20, 20, 20, 20, 28, 34, 22, 22]);
 
   const accountRows: unknown[][] = [excelHeaders("accounts", locale)];
-  if (!template) for (const account of index.accounts) accountRows.push([account.id, account.name, account.icon, account.order ?? "", account.balance, account.file.path]);
-  appendSheet(book, SHEETS.accounts, accountRows, [22, 24, 10, 12, 16, 34]);
+  if (!template) for (const account of index.accounts) accountRows.push([account.id, account.name, account.icon, account.kind, account.order ?? "", account.balance, account.file.path]);
+  appendSheet(book, SHEETS.accounts, accountRows, [22, 24, 10, 16, 12, 16, 34]);
 
   const planRows: unknown[][] = [excelHeaders("planning", locale)];
   if (!template) for (const plan of index.plans) planRows.push([
@@ -98,10 +98,12 @@ export function parseFinanceWorkbook(data: ArrayBuffer, index: FinanceIndex): Ex
       if (accountsByName.has(normalize(name))) { result.skipped++; continue; }
       const rawOrder = value(row, ["order", "порядок"]);
       const parsedOrder = rawOrder === "" ? undefined : Number(rawOrder);
+      const rawKind = normalize(text(row, ["type", "тип"]));
       result.accounts.push({
         id,
         name,
         icon: text(row, ["icon", "иконка"]) || "wallet",
+        kind: rawKind === "savings" || rawKind === "накопительный" || rawKind === "накопительные" ? "savings" : "envelope",
         order: Number.isInteger(parsedOrder) && (parsedOrder ?? -1) >= 0 ? parsedOrder : undefined,
       });
       existingIds.add(id); accountsById.set(id, id); accountsByName.set(normalize(name), id);

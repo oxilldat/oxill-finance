@@ -3,6 +3,8 @@ import { App, Modal, Notice, Setting } from "obsidian";
 import { t } from "./i18n";
 import { TransactionStore } from "./transaction-store";
 import { PlannedTransfer } from "./types";
+import { InteractiveDatePicker } from "./date-picker";
+import { AccountSelect } from "./account-select";
 
 export class PlannedTransferModal extends Modal {
   private amount: string;
@@ -10,6 +12,8 @@ export class PlannedTransferModal extends Modal {
   private fromAccountId: string;
   private toAccountId: string;
   private fundedByIncomePlanId?: string;
+  private datePicker?: InteractiveDatePicker;
+  private accountSelects: AccountSelect[] = [];
 
   constructor(
     app: App,
@@ -31,10 +35,7 @@ export class PlannedTransferModal extends Modal {
     this.contentEl.createEl("h2", { text: this.plan ? t("Изменить перевод", "Edit transfer") : t("Запланировать перевод", "Plan transfer") });
     const accounts = this.store.getIndex().accounts;
     const accountSelect = (setting: Setting, current: string, onChange: (value: string) => void): void => {
-      setting.addDropdown((dropdown) => {
-        for (const account of accounts) dropdown.addOption(account.id, account.name);
-        dropdown.setValue(current).onChange(onChange);
-      });
+      this.accountSelects.push(new AccountSelect(setting, accounts, current, onChange));
     };
     accountSelect(new Setting(this.contentEl).setName(t("Со счёта", "From account")), this.fromAccountId, (value) => { this.fromAccountId = value; });
     accountSelect(new Setting(this.contentEl).setName(t("На счёт", "To account")), this.toAccountId, (value) => { this.toAccountId = value; });
@@ -43,13 +44,19 @@ export class PlannedTransferModal extends Modal {
       text.setValue(this.amount).setPlaceholder("0").onChange((value) => { this.amount = value; });
     });
     new Setting(this.contentEl).setName(t("Дата", "Date")).addText((text) => {
-      text.inputEl.type = "date"; text.setValue(this.dueDate).onChange((value) => { this.dueDate = value; });
+      text.setValue(this.dueDate).onChange((value) => { this.dueDate = value; });
+      this.datePicker = new InteractiveDatePicker(text.inputEl, this.dueDate, false, (value) => { this.dueDate = value; });
     });
     const actions = this.contentEl.createDiv({ cls: "oxf-modal-actions" });
     actions.createEl("button", { text: t("Отмена", "Cancel") }).addEventListener("click", () => this.close());
     actions.createEl("button", { cls: "mod-cta", text: t("Сохранить", "Save") }).addEventListener("click", () => void this.save());
   }
-  onClose(): void { this.contentEl.empty(); }
+  onClose(): void {
+    this.accountSelects.forEach((select) => select.destroy());
+    this.accountSelects = [];
+    this.datePicker?.destroy();
+    this.contentEl.empty();
+  }
   private async save(): Promise<void> {
     const amount = Number(this.amount.replace(",", "."));
     const dueDate = new Date(`${this.dueDate}T12:00:00`);

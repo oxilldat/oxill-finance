@@ -3,6 +3,10 @@ import { App, Modal, Notice, Setting } from "obsidian";
 import { t } from "./i18n";
 import { TransactionStore } from "./transaction-store";
 import { IncomePlan, IncomePlanCompletion } from "./types";
+import { CategorySuggest } from "./category-suggest";
+import { InteractiveDatePicker } from "./date-picker";
+import { AccountSelect } from "./account-select";
+import { SelectMenu } from "./select-menu";
 
 export class IncomePlanModal extends Modal {
   private title: string;
@@ -11,14 +15,18 @@ export class IncomePlanModal extends Modal {
   private category: string;
   private accountId: string;
   private completion: IncomePlanCompletion;
+  private categorySuggest?: CategorySuggest;
+  private datePicker?: InteractiveDatePicker;
+  private accountSelect?: AccountSelect;
+  private completionSelect?: SelectMenu;
 
-  constructor(app: App, private readonly store: TransactionStore, private readonly afterSave: () => void, private readonly plan?: IncomePlan) {
+  constructor(app: App, private readonly store: TransactionStore, private readonly afterSave: () => void, private readonly plan?: IncomePlan, private readonly categories: () => readonly string[] = () => []) {
     super(app);
     this.title = plan?.title ?? "";
     this.amount = plan ? String(plan.amount) : "";
     this.dueDate = localDateValue(plan?.dueDate ?? new Date());
     this.category = plan?.category ?? "";
-    this.accountId = plan?.accountId ?? "";
+    this.accountId = plan?.accountId ?? store.getIndex().accounts[0]?.id ?? "";
     this.completion = plan?.completion ?? "mark-only";
   }
 
@@ -32,27 +40,36 @@ export class IncomePlanModal extends Modal {
       text.setPlaceholder("0").setValue(this.amount).onChange((value) => { this.amount = value; });
     });
     new Setting(this.contentEl).setName(t("Ожидаемая дата", "Expected date")).addText((text) => {
-      text.inputEl.type = "date"; text.setValue(this.dueDate).onChange((value) => { this.dueDate = value; });
+      text.setValue(this.dueDate).onChange((value) => { this.dueDate = value; });
+      this.datePicker = new InteractiveDatePicker(text.inputEl, this.dueDate, false, (value) => { this.dueDate = value; });
     });
-    new Setting(this.contentEl).setName(t("Категория дохода", "Income category")).addText((text) =>
-      text.setPlaceholder(t("Зарплата", "Salary")).setValue(this.category).onChange((value) => { this.category = value; }));
+    new Setting(this.contentEl).setName(t("Категория дохода", "Income category")).addText((text) => {
+      text.setPlaceholder(t("Введите или выберите", "Type or choose")).setValue(this.category).onChange((value) => { this.category = value; });
+      this.categorySuggest = new CategorySuggest(this.app, text.inputEl, () => [...new Set([...this.categories(), ...(this.category ? [this.category] : [])])]
+        .sort((left, right) => left.localeCompare(right)), (category) => { this.category = category; text.setValue(category); });
+    });
     const accounts = this.store.getIndex().accounts;
-    new Setting(this.contentEl).setName(t("Счёт зачисления", "Destination account")).setDesc(t("Необязательно", "Optional")).addDropdown((dropdown) => {
-      dropdown.addOption("", t("Без счёта", "No account"));
-      for (const account of accounts) dropdown.addOption(account.id, account.name);
-      dropdown.setValue(this.accountId).onChange((value) => { this.accountId = value; });
-    });
-    new Setting(this.contentEl).setName(t("При получении", "When received")).addDropdown((dropdown) => {
-      dropdown.addOption("mark-only", t("Только отметить полученным", "Mark as received only"));
-      dropdown.addOption("create-income", t("Создать фактический доход", "Create an actual income"));
-      dropdown.setValue(this.completion).onChange((value) => { this.completion = value as IncomePlanCompletion; });
-    });
+    this.accountSelect = new AccountSelect(
+      new Setting(this.contentEl).setName(t("Счёт зачисления", "Destination account")),
+      accounts,
+      this.accountId,
+      (value) => { this.accountId = value; },
+    );
+    this.completionSelect = new SelectMenu(
+      new Setting(this.contentEl).setName(t("При получении", "When received")),
+      [
+        { value: "mark-only", label: t("Только отметить полученным", "Mark as received only"), icon: "circle-check" },
+        { value: "create-income", label: t("Создать фактический доход", "Create an actual income"), icon: "badge-dollar-sign" },
+      ],
+      this.completion,
+      (value) => { this.completion = value as IncomePlanCompletion; },
+    );
     const actions = this.contentEl.createDiv({ cls: "oxf-modal-actions" });
     actions.createEl("button", { text: t("Отмена", "Cancel") }).addEventListener("click", () => this.close());
     actions.createEl("button", { cls: "mod-cta", text: t("Сохранить", "Save") }).addEventListener("click", () => void this.save());
   }
 
-  onClose(): void { this.contentEl.empty(); }
+  onClose(): void { this.completionSelect?.destroy(); this.accountSelect?.destroy(); this.categorySuggest?.close(); this.datePicker?.destroy(); this.contentEl.empty(); }
 
   private async save(): Promise<void> {
     const amount = Number(this.amount.replace(",", "."));
@@ -61,7 +78,8 @@ export class IncomePlanModal extends Modal {
     if (!Number.isFinite(amount) || amount <= 0) return void new Notice(t("Введите сумму больше нуля", "Enter an amount greater than zero"));
     if (Number.isNaN(dueDate.getTime())) return void new Notice(t("Введите корректную дату", "Enter a valid date"));
     if (!this.category.trim()) return void new Notice(t("Введите категорию дохода", "Enter an income category"));
-    const input = { title: this.title.trim(), amount, dueDate, category: this.category.trim(), accountId: this.accountId || undefined, completion: this.completion };
+    if (!this.accountId || !this.store.getAccount(this.accountId)) return void new Notice(t("Выберите счёт", "Select an account"));
+    const input = { title: this.title.trim(), amount, dueDate, category: this.category.trim(), accountId: this.accountId, completion: this.completion };
     if (this.plan) await this.store.updateIncomePlan(this.plan, input); else await this.store.createIncomePlan(input);
     this.afterSave();
     new Notice(this.plan ? t("Плановый доход обновлён", "Planned income updated") : t("Доход запланирован", "Income planned"));

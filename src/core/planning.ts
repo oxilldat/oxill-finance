@@ -14,6 +14,11 @@ export interface MonthlyPlanningBudget {
   free: number;
 }
 
+export function copyPlanDueDate(source: Date, year: number, month: number): Date {
+  const day = Math.min(source.getDate(), new Date(year, month + 1, 0).getDate());
+  return new Date(year, month, day, 12);
+}
+
 export function calculateMonthlyPlanningBudget(
   expensePlans: readonly ExpensePlan[],
   incomePlans: readonly IncomePlan[],

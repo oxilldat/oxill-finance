@@ -4,6 +4,9 @@ import { TransactionStore } from "./transaction-store";
 import { ExpensePlan, ExpensePlanCompletion } from "./types";
 import { t } from "./i18n";
 import { CategorySuggest } from "./category-suggest";
+import { InteractiveDatePicker } from "./date-picker";
+import { AccountSelect } from "./account-select";
+import { SelectMenu } from "./select-menu";
 
 export interface ExpensePlanDefaults { category?: string; dueDate?: Date; fundedByIncomePlanId?: string; }
 
@@ -16,6 +19,9 @@ export class ExpensePlanModal extends Modal {
   private completion: ExpensePlanCompletion = "mark-only";
   private fundedByIncomePlanId?: string;
   private categorySuggest?: CategorySuggest;
+  private datePicker?: InteractiveDatePicker;
+  private accountSelect?: AccountSelect;
+  private completionSelect?: SelectMenu;
 
   constructor(
     app: App,
@@ -30,7 +36,7 @@ export class ExpensePlanModal extends Modal {
     this.amount = plan ? String(plan.amount) : "";
     this.dueDate = localDateValue(plan?.dueDate ?? defaults?.dueDate ?? new Date());
     this.category = plan?.category ?? defaults?.category ?? "";
-    this.accountId = plan?.accountId ?? "";
+    this.accountId = plan?.accountId ?? store.getIndex().accounts[0]?.id ?? "";
     this.completion = plan?.completion ?? "mark-only";
     this.fundedByIncomePlanId = plan?.fundedByIncomePlanId ?? defaults?.fundedByIncomePlanId;
   }
@@ -47,8 +53,8 @@ export class ExpensePlanModal extends Modal {
       text.setPlaceholder("0").setValue(this.amount).onChange((value) => { this.amount = value; });
     });
     new Setting(this.contentEl).setName(t("Срок", "Due date")).addText((text) => {
-      text.inputEl.type = "date";
       text.setValue(this.dueDate).onChange((value) => { this.dueDate = value; });
+      this.datePicker = new InteractiveDatePicker(text.inputEl, this.dueDate, false, (value) => { this.dueDate = value; });
     });
     new Setting(this.contentEl).setName(t("Категория", "Category")).addText((text) => {
       text.setPlaceholder(t("Введите или выберите", "Type or choose"))
@@ -59,22 +65,27 @@ export class ExpensePlanModal extends Modal {
           .sort((left, right) => left.localeCompare(right)), (category) => { this.category = category; });
     });
     const accounts = this.store.getIndex().accounts;
-    new Setting(this.contentEl).setName(t("Счёт", "Account")).setDesc(t("Необязательно", "Optional")).addDropdown((dropdown) => {
-      dropdown.addOption("", t("Без счёта", "No account"));
-      for (const account of accounts) dropdown.addOption(account.id, account.name);
-      dropdown.setValue(this.accountId).onChange((value) => { this.accountId = value; });
-    });
-    new Setting(this.contentEl).setName(t("При выполнении", "On completion")).addDropdown((dropdown) => {
-      dropdown.addOption("mark-only", t("Только отметить выполненным", "Mark as completed only"));
-      dropdown.addOption("create-expense", t("Создать фактический расход", "Create an actual expense"));
-      dropdown.setValue(this.completion).onChange((value) => { this.completion = value as ExpensePlanCompletion; });
-    });
+    this.accountSelect = new AccountSelect(
+      new Setting(this.contentEl).setName(t("Счёт", "Account")),
+      accounts,
+      this.accountId,
+      (value) => { this.accountId = value; },
+    );
+    this.completionSelect = new SelectMenu(
+      new Setting(this.contentEl).setName(t("При выполнении", "On completion")),
+      [
+        { value: "mark-only", label: t("Только отметить выполненным", "Mark as completed only"), icon: "circle-check" },
+        { value: "create-expense", label: t("Создать фактический расход", "Create an actual expense"), icon: "receipt" },
+      ],
+      this.completion,
+      (value) => { this.completion = value as ExpensePlanCompletion; },
+    );
     const actions = this.contentEl.createDiv({ cls: "oxf-modal-actions" });
     actions.createEl("button", { text: t("Отмена", "Cancel") }).addEventListener("click", () => this.close());
     actions.createEl("button", { cls: "mod-cta", text: this.plan ? t("Сохранить", "Save") : t("Создать", "Create") }).addEventListener("click", () => void this.save());
   }
 
-  onClose(): void { this.categorySuggest?.close(); this.contentEl.empty(); }
+  onClose(): void { this.completionSelect?.destroy(); this.accountSelect?.destroy(); this.categorySuggest?.close(); this.datePicker?.destroy(); this.contentEl.empty(); }
 
   private async save(): Promise<void> {
     const amount = Number(this.amount.replace(",", "."));
@@ -83,9 +94,10 @@ export class ExpensePlanModal extends Modal {
     if (!Number.isFinite(amount) || amount <= 0) return void new Notice(t("Введите сумму больше нуля", "Enter an amount greater than zero"));
     if (Number.isNaN(dueDate.getTime())) return void new Notice(t("Введите корректный срок", "Enter a valid due date"));
     if (!this.category.trim()) return void new Notice(t("Введите или выберите категорию", "Enter or choose a category"));
+    if (!this.accountId || !this.store.getAccount(this.accountId)) return void new Notice(t("Выберите счёт", "Select an account"));
     const input = {
       title: this.title.trim(), amount, dueDate, category: this.category.trim(),
-      accountId: this.accountId || undefined, completion: this.completion,
+      accountId: this.accountId, completion: this.completion,
       fundedByIncomePlanId: this.fundedByIncomePlanId,
     };
     if (this.plan) await this.store.updateExpensePlan(this.plan, input);

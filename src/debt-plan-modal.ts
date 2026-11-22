@@ -4,6 +4,9 @@ import { t } from "./i18n";
 import { TransactionStore } from "./transaction-store";
 import { FinanceDebt } from "./types";
 import { summarizeDebtPlanning } from "./core/debts";
+import { InteractiveDatePicker } from "./date-picker";
+import { AccountSelect } from "./account-select";
+import { SelectMenu } from "./select-menu";
 
 export type DebtPlanDirection = "pay" | "receive";
 
@@ -12,6 +15,9 @@ export class DebtPlanModal extends Modal {
   private amount: string;
   private dueDate = localDateValue(new Date());
   private accountId = "";
+  private datePicker?: InteractiveDatePicker;
+  private accountSelect?: AccountSelect;
+  private debtSelect?: SelectMenu;
 
   constructor(
     app: App,
@@ -33,21 +39,27 @@ export class DebtPlanModal extends Modal {
     this.renderForm();
   }
 
-  onClose(): void { this.contentEl.empty(); }
+  onClose(): void { this.debtSelect?.destroy(); this.accountSelect?.destroy(); this.datePicker?.destroy(); this.contentEl.empty(); }
 
   private renderForm(): void {
+    this.datePicker?.destroy();
+    this.accountSelect?.destroy();
+    this.debtSelect?.destroy();
     this.contentEl.empty();
     this.contentEl.createEl("h2", { text: this.direction === "pay" ? t("Запланировать погашение долга", "Plan debt repayment") : t("Запланировать получение долга", "Plan debt collection") });
     const debts = this.availableDebts();
-    new Setting(this.contentEl).setName(t("Долг", "Debt")).addDropdown((dropdown) => {
-      for (const debt of debts) dropdown.addOption(debt.id, debt.name);
-      dropdown.setValue(this.debtId).onChange((value) => {
+    this.debtSelect = new SelectMenu(
+      new Setting(this.contentEl).setName(t("Долг", "Debt")),
+      debts.map((debt) => ({ value: debt.id, label: debt.name, icon: "hand-coins" })),
+      this.debtId,
+      (value) => {
         this.debtId = value;
         const debt = debts.find((item) => item.id === value);
         this.amount = debt ? String(this.planningStatus(debt).unplannedAmount) : "";
         this.renderForm();
-      });
-    });
+      },
+      t("Нет доступных долгов", "No available debts"),
+    );
     const debt = debts.find((item) => item.id === this.debtId);
     new Setting(this.contentEl).setName(t("Сумма", "Amount")).addText((text) => {
       text.inputEl.type = "number";
@@ -57,16 +69,16 @@ export class DebtPlanModal extends Modal {
       text.setValue(this.amount).onChange((value) => { this.amount = value; });
     });
     new Setting(this.contentEl).setName(t("Дата", "Date")).addText((text) => {
-      text.inputEl.type = "date";
       text.setValue(this.dueDate).onChange((value) => { this.dueDate = value; });
+      this.datePicker = new InteractiveDatePicker(text.inputEl, this.dueDate, false, (value) => { this.dueDate = value; });
     });
     const accounts = this.store.getIndex().accounts;
-    new Setting(this.contentEl)
-      .setName(this.direction === "pay" ? t("Счёт списания", "Source account") : t("Счёт зачисления", "Destination account"))
-      .addDropdown((dropdown) => {
-        for (const account of accounts) dropdown.addOption(account.id, account.name);
-        dropdown.setValue(this.accountId).onChange((value) => { this.accountId = value; });
-      });
+    this.accountSelect = new AccountSelect(
+      new Setting(this.contentEl).setName(this.direction === "pay" ? t("Счёт списания", "Source account") : t("Счёт зачисления", "Destination account")),
+      accounts,
+      this.accountId,
+      (value) => { this.accountId = value; },
+    );
     const actions = this.contentEl.createDiv({ cls: "oxf-modal-actions" });
     actions.createEl("button", { text: t("Отмена", "Cancel") }).addEventListener("click", () => this.close());
     actions.createEl("button", { cls: "mod-cta", text: t("Запланировать", "Plan") }).addEventListener("click", () => void this.save());

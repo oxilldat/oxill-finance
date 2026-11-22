@@ -9,7 +9,7 @@ Local-first personal finance planning for Obsidian. Oxill Finance turns Markdown
 ### What it does
 
 - Shows income, expenses, balance, category breakdown, cash-flow dynamics, and operation history.
-- Supports custom accounts, drag-and-drop account ordering, account-to-account transfers, and account balances calculated from notes.
+- Supports envelope and savings accounts, independent drag-and-drop ordering, account-to-account transfers, and account balances calculated from notes.
 - Uses a required default account for new income and expenses; the default can be changed in settings and is protected from deletion.
 - Provides yearly expense planning with a category-by-month heatmap.
 - Plans future income and account-to-account transfers, and turns completed plans into ordinary operations.
@@ -17,6 +17,8 @@ Local-first personal finance planning for Obsidian. Oxill Finance turns Markdown
 - Turns a debt into a linked planned income or expense; completing the plan reduces the remaining debt and archives it automatically after full repayment.
 - Creates and edits ordinary Markdown files instead of hiding financial records in a proprietary database.
 - Imports and exports accounts, operations, transfers, plans, debts, and categories as a single Excel workbook.
+- Uses a consistent interactive calendar for transaction dates, transfers, debt payments, and monthly plans.
+- Copies a month's planned expenses into the next month while preserving their details and skipping duplicates.
 - Supports Russian and English interfaces, light and dark Obsidian themes, desktop and mobile layouts.
 
 All financial data stays in your vault. The plugin does not use network requests, telemetry, external accounts, or cloud synchronization.

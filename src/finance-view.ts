@@ -41,6 +41,7 @@ export interface FinanceViewActions {
   setDebtArchived: (debt: FinanceDebt, archived: boolean) => void;
   planDebtPayment: (direction: DebtPlanDirection, debtId?: string) => void;
   createPlan: (category?: string, dueDate?: Date, fundedByIncomePlanId?: string) => void;
+  copyExpensePlansToNextMonth: (plans: ExpensePlan[], year: number, month: number) => void;
   editPlan: (plan: ExpensePlan) => void;
   deletePlan: (plan: ExpensePlan) => void;
   completePlan: (plan: ExpensePlan) => void;
@@ -49,6 +50,7 @@ export interface FinanceViewActions {
   deleteIncomePlan: (plan: IncomePlan) => void;
   completeIncomePlan: (plan: IncomePlan) => void;
   createPlannedTransfer: (dueDate?: Date, fundedByIncomePlanId?: string) => void;
+  copyPlannedTransfersToNextMonth: (plans: PlannedTransfer[], year: number, month: number) => void;
   editPlannedTransfer: (plan: PlannedTransfer) => void;
   deletePlannedTransfer: (plan: PlannedTransfer) => void;
   completePlannedTransfer: (plan: PlannedTransfer) => void;
@@ -460,9 +462,27 @@ export class FinanceView extends ItemView {
       return;
     }
 
-    const grid = container.createDiv({ cls: "oxf-account-grid" });
+    this.renderAccountGroup(container, "envelope", t("Конверты", "Envelopes"), accounts);
+    this.renderAccountGroup(container, "savings", t("Накопительные", "Savings"), accounts);
+  }
+
+  private renderAccountGroup(container: HTMLElement, kind: FinanceAccount["kind"], title: string, accounts: FinanceAccount[]): void {
+    const groupAccounts = accounts.filter((account) => account.kind === kind);
+    const section = container.createEl("section", { cls: "oxf-account-group" });
+    const heading = section.createDiv({ cls: "oxf-account-group-heading" });
+    heading.createEl("strong", { text: title });
+    heading.createSpan({ text: t(`${groupAccounts.length} счетов`, `${groupAccounts.length} accounts`) });
+    if (groupAccounts.length === 0) {
+      section.createEl("p", { cls: "oxf-account-group-empty", text: kind === "envelope"
+        ? t("Здесь появятся счета для повседневных операций.", "Accounts used for everyday operations will appear here.")
+        : t("Здесь появятся счета для хранения накоплений.", "Accounts used to store savings will appear here.") });
+      return;
+    }
+    const grid = section.createDiv({ cls: `oxf-account-grid${kind === "savings" ? " is-savings-list" : ""}` });
+    grid.dataset.accountKind = kind;
     grid.addEventListener("dragover", (event) => {
       if (!this.draggedAccountId) return;
+      if (this.store.getAccount(this.draggedAccountId)?.kind !== kind) return;
       event.preventDefault();
       if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
       const target = (event.target as HTMLElement).closest<HTMLElement>(".oxf-account-card");
@@ -470,6 +490,7 @@ export class FinanceView extends ItemView {
     });
     grid.addEventListener("drop", (event) => {
       if (!this.draggedAccountId) return;
+      if (this.store.getAccount(this.draggedAccountId)?.kind !== kind) return;
       event.preventDefault();
       const target = (event.target as HTMLElement).closest<HTMLElement>(".oxf-account-card");
       if (target && target.dataset.accountId !== this.draggedAccountId) this.previewAccountOrder(grid, target, event);
@@ -480,7 +501,10 @@ export class FinanceView extends ItemView {
       this.clearAccountDropIndicators(grid);
       void this.actions.reorderAccounts(ids);
     });
-    for (const account of accounts) this.renderAccountCard(grid, account, accounts);
+    for (const account of groupAccounts) {
+      if (kind === "savings") this.renderSavingsAccountRow(grid, account, accounts);
+      else this.renderAccountCard(grid, account, accounts);
+    }
   }
 
   private renderPlanning(container: HTMLElement): void {
@@ -525,10 +549,10 @@ export class FinanceView extends ItemView {
       workspace.empty();
       if (this.planningPanel === "expenses") {
         const filtered = this.filterExpensePlans(monthPlans);
-        this.renderMonthlyExpenses(workspace, filtered, filtered.length !== monthPlans.length);
+        this.renderMonthlyExpenses(workspace, filtered, filtered.length !== monthPlans.length, monthPlans);
       } else if (this.planningPanel === "transfers") {
         const filtered = this.filterPlannedTransfers(monthTransfers);
-        this.renderMonthlyTransfers(workspace, filtered, filtered.length !== monthTransfers.length);
+        this.renderMonthlyTransfers(workspace, filtered, filtered.length !== monthTransfers.length, monthTransfers);
       } else {
         this.renderIncomeAllocation(workspace, monthIncomePlans, monthPlans, monthTransfers);
       }
@@ -750,13 +774,18 @@ export class FinanceView extends ItemView {
     }
   }
 
-  private renderMonthlyExpenses(container: HTMLElement, plans: ExpensePlan[], isFiltered = false): void {
+  private renderMonthlyExpenses(container: HTMLElement, plans: ExpensePlan[], isFiltered = false, allPlans: ExpensePlan[] = plans): void {
     const card = container.createDiv({ cls: "oxf-card oxf-month-expenses" });
     const heading = card.createDiv({ cls: "oxf-month-planner-heading" });
     const headingText = heading.createDiv();
     headingText.createEl("strong", { text: t("Расходы месяца", "Monthly expenses") });
     headingText.createSpan({ text: t(`${plans.length} планов · ${money(plans.reduce((sum, plan) => sum + plan.amount, 0))} ₽`, `${plans.length} plans · ${money(plans.reduce((sum, plan) => sum + plan.amount, 0))} ₽`) });
-    const add = heading.createEl("button", { attr: { type: "button", "aria-label": t("Добавить расход", "Add expense") } });
+    const actions = heading.createDiv({ cls: "oxf-month-planner-heading-actions" });
+    const copy = actions.createEl("button", { cls: "oxf-copy-plans-button", attr: { type: "button", "aria-label": t("Скопировать расходы в следующий месяц", "Copy expenses to next month"), title: t("Скопировать в следующий месяц", "Copy to next month") } });
+    setIcon(copy, "copy");
+    copy.disabled = allPlans.length === 0;
+    copy.addEventListener("click", () => this.actions.copyExpensePlansToNextMonth(allPlans, this.planningYear, this.planningMonth));
+    const add = actions.createEl("button", { attr: { type: "button", "aria-label": t("Добавить расход", "Add expense") } });
     setIcon(add, "plus");
     add.addEventListener("click", () => this.actions.createPlan(undefined, new Date(this.planningYear, this.planningMonth, 1, 12)));
     if (plans.length === 0) {
@@ -799,13 +828,18 @@ export class FinanceView extends ItemView {
     }
   }
 
-  private renderMonthlyTransfers(container: HTMLElement, plans: PlannedTransfer[], isFiltered = false): void {
+  private renderMonthlyTransfers(container: HTMLElement, plans: PlannedTransfer[], isFiltered = false, allPlans: PlannedTransfer[] = plans): void {
     const card = container.createDiv({ cls: "oxf-card oxf-month-expenses" });
     const heading = card.createDiv({ cls: "oxf-month-planner-heading" });
     const headingText = heading.createDiv();
     headingText.createEl("strong", { text: t("Переводы месяца", "Monthly transfers") });
     headingText.createSpan({ text: t(`${plans.length} переводов · ${money(plans.reduce((sum, plan) => sum + plan.amount, 0))} ₽`, `${plans.length} transfers · ${money(plans.reduce((sum, plan) => sum + plan.amount, 0))} ₽`) });
-    const add = heading.createEl("button", { attr: { type: "button", "aria-label": t("Добавить перевод", "Add transfer") } });
+    const actions = heading.createDiv({ cls: "oxf-month-planner-heading-actions" });
+    const copy = actions.createEl("button", { cls: "oxf-copy-plans-button", attr: { type: "button", "aria-label": t("Скопировать переводы в следующий месяц", "Copy transfers to next month"), title: t("Скопировать в следующий месяц", "Copy to next month") } });
+    setIcon(copy, "copy");
+    copy.disabled = allPlans.length === 0;
+    copy.addEventListener("click", () => this.actions.copyPlannedTransfersToNextMonth(allPlans, this.planningYear, this.planningMonth));
+    const add = actions.createEl("button", { attr: { type: "button", "aria-label": t("Добавить перевод", "Add transfer") } });
     setIcon(add, "plus");
     add.addEventListener("click", () => this.actions.createPlannedTransfer(new Date(this.planningYear, this.planningMonth, 1, 12)));
     if (plans.length === 0) {
@@ -1186,6 +1220,37 @@ export class FinanceView extends ItemView {
     const heading = card.createDiv({ cls: "oxf-account-card-heading" });
     const icon = heading.createSpan({ cls: "oxf-account-icon" });
     setIcon(icon, normalizeAccountIcon(account.icon));
+    this.attachAccountDrag(card, account, container);
+    const identity = heading.createDiv({ cls: "oxf-account-identity" });
+    identity.createEl("strong", { text: account.name });
+    identity.createSpan({ text: `${t("Доступно сейчас", "Available now")}: ${money(account.balance)} ₽` });
+    this.renderAccountCategoryChart(card, account.id);
+    const footer = card.createDiv({ cls: "oxf-account-card-footer" });
+    const transfer = footer.createEl("button", { cls: "oxf-account-transfer", text: t("Перевести", "Transfer"), attr: { type: "button" } });
+    transfer.disabled = accounts.length < 2 || toMinorUnits(account.balance) <= 0;
+    transfer.addEventListener("click", () => this.actions.transfer(account.id));
+    const more = footer.createEl("button", { cls: "oxf-account-more", text: "•••", attr: { type: "button", "aria-label": t(`Действия со счётом ${account.name}`, `Actions for account ${account.name}`) } });
+    more.addEventListener("click", (event) => this.showAccountMenu(event, account));
+  }
+
+  private renderSavingsAccountRow(container: HTMLElement, account: FinanceAccount, accounts: FinanceAccount[]): void {
+    const row = container.createEl("section", { cls: "oxf-card oxf-account-card oxf-savings-account-row", attr: { draggable: "true" } });
+    row.dataset.accountId = account.id;
+    const icon = row.createSpan({ cls: "oxf-account-icon" });
+    setIcon(icon, normalizeAccountIcon(account.icon));
+    const identity = row.createDiv({ cls: "oxf-account-identity" });
+    identity.createEl("strong", { text: account.name });
+    identity.createSpan({ text: t("Накопительный счёт", "Savings account") });
+    row.createEl("strong", { cls: "oxf-account-balance", text: `${money(account.balance)} ₽` });
+    const transfer = row.createEl("button", { cls: "oxf-account-transfer", text: t("Перевести", "Transfer"), attr: { type: "button" } });
+    transfer.disabled = accounts.length < 2 || toMinorUnits(account.balance) <= 0;
+    transfer.addEventListener("click", () => this.actions.transfer(account.id));
+    const more = row.createEl("button", { cls: "oxf-account-more", text: "•••", attr: { type: "button", "aria-label": t(`Действия со счётом ${account.name}`, `Actions for account ${account.name}`) } });
+    more.addEventListener("click", (event) => this.showAccountMenu(event, account));
+    this.attachAccountDrag(row, account, container);
+  }
+
+  private attachAccountDrag(card: HTMLElement, account: FinanceAccount, container: HTMLElement): void {
     card.addEventListener("dragstart", (event) => {
       if ((event.target as HTMLElement).closest("button")) {
         event.preventDefault();
@@ -1208,16 +1273,6 @@ export class FinanceView extends ItemView {
       this.clearAccountDropIndicators(container);
       if (cancelled) this.render();
     });
-    const identity = heading.createDiv({ cls: "oxf-account-identity" });
-    identity.createEl("strong", { text: account.name });
-    identity.createSpan({ text: `${t("Доступно сейчас", "Available now")}: ${money(account.balance)} ₽` });
-    this.renderAccountCategoryChart(card, account.id);
-    const footer = card.createDiv({ cls: "oxf-account-card-footer" });
-    const transfer = footer.createEl("button", { cls: "oxf-account-transfer", text: t("Перевести", "Transfer"), attr: { type: "button" } });
-    transfer.disabled = accounts.length < 2 || toMinorUnits(account.balance) <= 0;
-    transfer.addEventListener("click", () => this.actions.transfer(account.id));
-    const more = footer.createEl("button", { cls: "oxf-account-more", text: "•••", attr: { type: "button", "aria-label": t(`Действия со счётом ${account.name}`, `Actions for account ${account.name}`) } });
-    more.addEventListener("click", (event) => this.showAccountMenu(event, account));
   }
 
   private clearAccountDropIndicators(container: HTMLElement): void {

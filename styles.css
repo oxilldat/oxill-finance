@@ -183,6 +183,13 @@
 .oxf-account-more { width:38px; padding:0; color:var(--oxf-muted); letter-spacing:1px; }
 .oxf-account-transfer:disabled { opacity:.35; cursor:not-allowed; }
 .oxf-account-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(310px,1fr)); gap:12px; }
+.oxf-account-grid.is-savings-list { grid-template-columns:1fr; gap:8px; }
+.oxf-account-group { display:grid; gap:10px; margin-top:18px; }
+.oxf-account-group:first-child { margin-top:0; }
+.oxf-account-group-heading { display:flex; align-items:baseline; justify-content:space-between; gap:12px; padding:0 2px; }
+.oxf-account-group-heading strong { color:var(--oxf-text); font-size:14px; }
+.oxf-account-group-heading span { color:var(--oxf-muted); font-size:9px; }
+.oxf-account-group-empty { margin:0; padding:20px; color:var(--oxf-muted); border:1px dashed var(--oxf-line); border-radius:14px; font-size:10px; text-align:center; }
 .oxf-account-card { position:relative; display:flex; min-height:260px; flex-direction:column; cursor:move; }
 .oxf-account-card:hover { border-color:color-mix(in srgb,var(--oxf-accent) 35%,var(--oxf-line)); }
 .oxf-account-card.is-dragging { z-index:3; opacity:1; border-color:var(--oxf-accent); box-shadow:0 12px 34px color-mix(in srgb,var(--oxf-accent) 18%,transparent); }
@@ -219,6 +226,39 @@
 .oxf-account-secondary-actions button { color:var(--oxf-muted); border-color:var(--oxf-line); background:transparent; }
 .oxf-account-secondary-actions button.is-danger { color:var(--oxf-danger); }
 .oxf-account-card button:disabled { opacity:.38; cursor:not-allowed; }
+.oxf-savings-account-row { display:grid; min-height:0; grid-template-columns:42px minmax(0,1fr) auto minmax(100px,150px) 38px; gap:12px; align-items:center; padding:14px 16px; }
+.oxf-savings-account-row .oxf-account-balance { margin:0; color:var(--oxf-text); font-size:16px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.oxf-savings-account-row .oxf-account-transfer,.oxf-savings-account-row .oxf-account-more { width:100%; }
+.oxf-savings-account-row.is-drop-before::before,.oxf-savings-account-row.is-drop-after::after { right:12px; left:12px; width:auto; height:3px; }
+.oxf-savings-account-row.is-drop-before::before { top:-5px; bottom:auto; }
+.oxf-savings-account-row.is-drop-after::after { top:auto; bottom:-5px; }
+@media (max-width:700px) {
+  .oxf-savings-account-row { grid-template-columns:42px minmax(0,1fr) 38px; }
+  .oxf-savings-account-row .oxf-account-balance { grid-column:2; font-size:14px; }
+  .oxf-savings-account-row .oxf-account-transfer { grid-column:1 / 3; }
+  .oxf-savings-account-row .oxf-account-more { grid-column:3; grid-row:1; }
+}
+.oxf-date-picker-input { cursor:pointer; }
+.oxf-month-planner-heading>.oxf-month-planner-heading-actions { display:flex; align-items:center; gap:5px; }
+.oxf-month-planner-heading-actions button { display:grid; width:28px; height:28px; place-items:center; padding:0; color:var(--oxf-muted); border:0; border-radius:8px; background:transparent; box-shadow:none; }
+.oxf-month-planner-heading-actions button:hover { color:var(--oxf-text); background:var(--oxf-hover); }
+.oxf-month-planner-heading-actions button:disabled { opacity:.35; cursor:not-allowed; }
+.oxf-month-planner-heading-actions .oxf-copy-plans-button { border:1px solid var(--oxf-line); background:var(--oxf-soft); }
+.oxf-month-planner-heading-actions .oxf-copy-plans-button:hover { color:var(--oxf-on-accent); border-color:var(--oxf-accent); background:var(--oxf-accent); }
+.oxf-copy-plans-modal .modal-content { max-width:620px; }
+.oxf-copy-plans-description { margin:0 0 12px; color:var(--text-muted); font-size:12px; }
+.oxf-copy-plans-toolbar { display:flex; gap:7px; margin-bottom:10px; }
+.oxf-copy-plans-toolbar button { height:30px; padding:0 10px; font-size:10px; }
+.oxf-copy-plans-list { display:grid; max-height:min(440px,55vh); overflow:auto; border:1px solid var(--oxf-line); border-radius:12px; }
+.oxf-copy-plan-row { display:grid; grid-template-columns:22px minmax(0,1fr) auto; gap:10px; align-items:center; min-height:54px; padding:8px 11px; border-top:1px solid var(--oxf-line); cursor:pointer; }
+.oxf-copy-plan-row:first-child { border-top:0; }
+.oxf-copy-plan-row:hover { background:var(--oxf-hover); }
+.oxf-copy-plan-row input { margin:0; }
+.oxf-copy-plan-row>div { display:grid; min-width:0; gap:2px; }
+.oxf-copy-plan-row strong,.oxf-copy-plan-row span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.oxf-copy-plan-row strong { font-size:11px; }
+.oxf-copy-plan-row span { color:var(--oxf-muted); font-size:9px; }
+.oxf-copy-plan-row b { font-size:11px; font-variant-numeric:tabular-nums; white-space:nowrap; }
 .oxf-accounts-empty { display:grid; min-height:180px; place-content:center; text-align:center; }
 .oxf-accounts-empty strong { font-size:15px; }
 .oxf-issues { margin-top:12px; padding:13px 16px; color:var(--oxf-danger); border:1px solid var(--oxf-danger-line); border-radius:12px; background:var(--oxf-danger-bg); font-size:10px; }
@@ -279,8 +319,8 @@
 .oxf-planning-filter-menu>span:first-child { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .oxf-planning-filter-menu>span:last-child { display:grid; width:15px; height:15px; flex:0 0 15px; place-items:center; color:var(--oxf-muted); }
 .oxf-planning-filter-menu>span:last-child svg { width:13px; height:13px; }
-.oxf-planning-filter-reset { display:grid; width:36px; height:36px; flex:0 0 36px; place-items:center; padding:0; color:var(--oxf-muted); border:1px solid transparent; border-radius:9px; background:transparent; box-shadow:none; opacity:0; pointer-events:none; }
-.oxf-planning-filter-reset.is-visible { opacity:1; pointer-events:auto; }
+.oxf-planning-filter-reset { display:none; width:36px; height:36px; flex:0 0 36px; place-items:center; padding:0; color:var(--oxf-muted); border:1px solid transparent; border-radius:9px; background:transparent; box-shadow:none; }
+.oxf-planning-filter-reset.is-visible { display:grid; }
 .oxf-planning-filter-reset.is-visible:hover { color:var(--oxf-text); border-color:var(--oxf-line); background:var(--oxf-hover); }
 .oxf-planning-filter-reset svg { width:15px; height:15px; }
 .oxf-month-planner { display:block; }
@@ -566,6 +606,20 @@
 .oxf-transaction-modal input[type="number"],.oxf-transaction-modal input[type="datetime-local"],.oxf-transaction-modal .oxf-transaction-category-input { width:190px; }
 .oxf-view button.oxf-transaction-account-select,.oxf-transaction-modal button.oxf-transaction-account-select { display:grid; width:190px; height:36px; grid-template-columns:18px minmax(0,1fr) 15px; gap:8px; align-items:center; padding:0 10px; color:var(--text-normal); border:1px solid var(--background-modifier-border); border-radius:var(--input-radius); background:var(--dropdown-background); box-shadow:var(--input-shadow); text-align:left; }
 .oxf-transaction-modal button.oxf-transaction-account-select:hover { border-color:var(--background-modifier-border-hover); background:var(--background-modifier-hover); }
+.modal button.oxf-account-select { display:grid; width:220px; max-width:100%; height:38px; grid-template-columns:18px minmax(0,1fr) 15px; gap:9px; align-items:center; padding:0 11px; color:var(--text-normal); border:1px solid var(--background-modifier-border); border-radius:var(--input-radius); background:var(--dropdown-background); box-shadow:var(--input-shadow); text-align:left; }
+.modal button.oxf-account-select:hover,.modal button.oxf-account-select:focus-visible { border-color:var(--interactive-accent); background:var(--background-modifier-hover); }
+.oxf-account-select-icon,.oxf-account-select-chevron { display:grid; place-items:center; color:var(--text-muted); }
+.oxf-account-select-icon svg { width:17px; height:17px; }
+.oxf-account-select-chevron svg { width:14px; height:14px; }
+.oxf-account-select-label { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.modal button.oxf-select-menu,.oxf-finance-settings-group button.oxf-select-menu { display:grid; width:220px; max-width:100%; min-height:38px; grid-template-columns:18px minmax(0,1fr) 15px; gap:9px; align-items:center; padding:0 11px; color:var(--text-normal); border:1px solid var(--background-modifier-border); border-radius:var(--input-radius); background:var(--dropdown-background); box-shadow:var(--input-shadow); text-align:left; }
+.modal button.oxf-select-menu:hover,.modal button.oxf-select-menu:focus-visible,.oxf-finance-settings-group button.oxf-select-menu:hover,.oxf-finance-settings-group button.oxf-select-menu:focus-visible { border-color:var(--interactive-accent); background:var(--background-modifier-hover); }
+.oxf-select-menu-icon,.oxf-select-menu-chevron { display:grid; place-items:center; color:var(--text-muted); }
+.oxf-select-menu-icon:empty { visibility:hidden; }
+.oxf-select-menu-icon svg { width:17px; height:17px; }
+.oxf-select-menu-chevron svg { width:14px; height:14px; }
+.oxf-select-menu-label { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.oxf-select-menu:disabled { opacity:.55; cursor:not-allowed; }
 .oxf-transaction-account-icon,.oxf-transaction-account-chevron { display:grid; place-items:center; color:var(--text-muted); }
 .oxf-transaction-account-icon svg { width:16px; height:16px; }
 .oxf-transaction-account-chevron svg { width:13px; height:13px; }

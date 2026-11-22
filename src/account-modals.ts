@@ -4,13 +4,18 @@ import { DEFAULT_ACCOUNT_ICON, normalizeAccountIcon } from "./core/account-icons
 import { hasSufficientFunds } from "./core/money";
 import { IconPicker } from "./icon-picker";
 import { TransactionStore } from "./transaction-store";
-import { FinanceAccount, FinanceTransfer } from "./types";
+import { AccountKind, FinanceAccount, FinanceTransfer } from "./types";
 import { t } from "./i18n";
+import { InteractiveDatePicker } from "./date-picker";
+import { AccountSelect } from "./account-select";
+import { SelectMenu } from "./select-menu";
 
 export class AccountModal extends Modal {
   private name: string;
   private icon: string;
+  private kind: AccountKind;
   private iconPicker: IconPicker | null = null;
+  private kindSelect?: SelectMenu;
 
   constructor(
     app: App,
@@ -21,6 +26,7 @@ export class AccountModal extends Modal {
     super(app);
     this.name = account?.name ?? "";
     this.icon = normalizeAccountIcon(account?.icon);
+    this.kind = account?.kind ?? "envelope";
   }
 
   onOpen(): void {
@@ -50,6 +56,15 @@ export class AccountModal extends Modal {
           this.iconPicker.open();
         });
       });
+    this.kindSelect = new SelectMenu(
+      new Setting(this.contentEl).setName(t("Тип счёта", "Account type")),
+      [
+        { value: "envelope", label: t("Конверт", "Envelope"), icon: "wallet-cards" },
+        { value: "savings", label: t("Накопительный", "Savings"), icon: "piggy-bank" },
+      ],
+      this.kind,
+      (value) => { this.kind = value === "savings" ? "savings" : "envelope"; },
+    );
     const actions = this.contentEl.createDiv({ cls: "oxf-modal-actions" });
     actions.createEl("button", { text: t("Отмена", "Cancel") }).addEventListener("click", () => this.close());
     actions.createEl("button", { cls: "mod-cta", text: t("Сохранить", "Save") }).addEventListener("click", () => void this.save());
@@ -58,6 +73,7 @@ export class AccountModal extends Modal {
   onClose(): void {
     this.iconPicker?.close();
     this.iconPicker = null;
+    this.kindSelect?.destroy();
     this.contentEl.empty();
   }
 
@@ -65,8 +81,8 @@ export class AccountModal extends Modal {
     const name = this.name.trim();
     const icon = normalizeAccountIcon(this.icon) || DEFAULT_ACCOUNT_ICON;
     if (!name) return void new Notice(t("Введите название счёта", "Enter an account name"));
-    if (this.account) await this.store.updateAccount(this.account, { name, icon });
-    else await this.store.createAccount({ name, icon });
+    if (this.account) await this.store.updateAccount(this.account, { name, icon, kind: this.kind });
+    else await this.store.createAccount({ name, icon, kind: this.kind });
     this.afterSave();
     new Notice(this.account ? t("Счёт обновлён", "Account updated") : t("Счёт создан", "Account created"));
     this.close();
@@ -86,6 +102,8 @@ export class TransferModal extends Modal {
   private amount = "";
   private comment = "";
   private date = localDateTimeValue(new Date());
+  private datePicker?: InteractiveDatePicker;
+  private accountSelects: AccountSelect[] = [];
 
   constructor(
     app: App,
@@ -106,11 +124,7 @@ export class TransferModal extends Modal {
     this.contentEl.createEl("h2", { text: this.transfer ? t("Изменить перевод", "Edit transfer") : t("Перевод между счетами", "Transfer between accounts") });
     const accounts = this.store.getIndex().accounts;
     const addAccountDropdown = (setting: Setting, current: string, onChange: (value: string) => void): void => {
-      setting.addDropdown((dropdown) => {
-        dropdown.addOption("", t("Выберите счёт", "Select an account"));
-        for (const account of accounts) dropdown.addOption(account.id, account.name);
-        dropdown.setValue(current).onChange(onChange);
-      });
+      this.accountSelects.push(new AccountSelect(setting, accounts, current, onChange));
     };
     addAccountDropdown(new Setting(this.contentEl).setName(t("Со счёта", "From account")), this.fromAccountId, (value) => { this.fromAccountId = value; });
     addAccountDropdown(new Setting(this.contentEl).setName(t("На счёт", "To account")), this.toAccountId, (value) => { this.toAccountId = value; });
@@ -123,15 +137,20 @@ export class TransferModal extends Modal {
     new Setting(this.contentEl).setName(t("Комментарий", "Comment")).addText((text) =>
       text.setPlaceholder(t("Необязательно", "Optional")).setValue(this.comment).onChange((value) => { this.comment = value; }));
     new Setting(this.contentEl).setName(t("Дата и время", "Date and time")).addText((text) => {
-      text.inputEl.type = "datetime-local";
       text.setValue(this.date).onChange((value) => { this.date = value; });
+      this.datePicker = new InteractiveDatePicker(text.inputEl, this.date, true, (value) => { this.date = value; });
     });
     const actions = this.contentEl.createDiv({ cls: "oxf-modal-actions" });
     actions.createEl("button", { text: t("Отмена", "Cancel") }).addEventListener("click", () => this.close());
     actions.createEl("button", { cls: "mod-cta", text: t("Перевести", "Transfer") }).addEventListener("click", () => void this.save());
   }
 
-  onClose(): void { this.contentEl.empty(); }
+  onClose(): void {
+    this.accountSelects.forEach((select) => select.destroy());
+    this.accountSelects = [];
+    this.datePicker?.destroy();
+    this.contentEl.empty();
+  }
 
   private async save(): Promise<void> {
     const amount = Number(this.amount.replace(",", "."));

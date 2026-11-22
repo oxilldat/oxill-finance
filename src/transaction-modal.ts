@@ -7,6 +7,7 @@ import { TransactionStore } from "./transaction-store";
 import { FinanceAccount, FinanceTransaction } from "./types";
 import { TransactionKind } from "./types";
 import { t } from "./i18n";
+import { InteractiveDatePicker } from "./date-picker";
 
 export class TransactionModal extends Modal {
   private amount = "";
@@ -17,6 +18,7 @@ export class TransactionModal extends Modal {
   private categorySuggest?: CategorySuggest;
   private accountMenu?: Menu;
   private accountMenuClosedAt = 0;
+  private datePicker?: InteractiveDatePicker;
 
   constructor(
     app: App,
@@ -67,8 +69,8 @@ export class TransactionModal extends Modal {
       });
     }
     new Setting(this.contentEl).setName(t("Дата и время", "Date and time")).addText((text) => {
-      text.inputEl.type = "datetime-local";
       text.setValue(this.date).onChange((value) => { this.date = value; });
+      this.datePicker = new InteractiveDatePicker(text.inputEl, this.date, true, (value) => { this.date = value; });
     });
     const actions = this.contentEl.createDiv({ cls: "oxf-modal-actions" });
     const cancel = actions.createEl("button", { text: t("Отмена", "Cancel") });
@@ -82,6 +84,7 @@ export class TransactionModal extends Modal {
     this.accountMenu = undefined;
     this.categorySuggest?.close();
     this.categorySuggest = undefined;
+    this.datePicker?.destroy();
     this.contentEl.empty();
   }
 

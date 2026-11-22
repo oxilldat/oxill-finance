@@ -8,7 +8,7 @@ import { setFinanceLocale } from "../i18n";
 import { excelHeaders } from "./excel-schema";
 import { normalizeAccountIcon } from "./account-icons";
 import { calculateDebtPayment, splitDebtsByArchive, summarizeDebtPlanning, summarizeDebts } from "./debts";
-import { calculateMonthlyPlanningBudget, calculatePlanningForecast } from "./planning";
+import { calculateMonthlyPlanningBudget, calculatePlanningForecast, copyPlanDueDate } from "./planning";
 import { calculateIncomeAllocation } from "./income-allocation";
 import { formatMoney, fromMinorUnits, hasSufficientFunds, toMinorUnits } from "./money";
 import type { ExpensePlan, IncomePlan, PlannedTransfer } from "../types";
@@ -102,6 +102,11 @@ test("рассчитывает свободные деньги выбранно�
     transfers: 40_000,
     free: 0,
   });
+});
+
+test("при копировании плана ограничивает день последним днём следующего месяца", () => {
+  assert.deepEqual(copyPlanDueDate(new Date(2026, 0, 31, 12), 2026, 1), new Date(2026, 1, 28, 12));
+  assert.deepEqual(copyPlanDueDate(new Date(2026, 10, 15, 12), 2026, 11), new Date(2026, 11, 15, 12));
 });
 
 test("распределяет расход и перевод по части дохода", () => {

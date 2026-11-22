@@ -1,9 +1,10 @@
 import { App, normalizePath, TFile } from "obsidian";
 
-import { ExpensePlan, ExpensePlanCompletion, ExpensePlanStatus, FinanceAccount, FinanceDebt, FinanceIndex, FinanceMonthSummary, FinanceTransaction, FinanceTransfer, IncomePlan, IncomePlanCompletion, MonthSummaryCategory, PlannedTransfer, TransactionKind } from "./types";
+import { AccountKind, ExpensePlan, ExpensePlanCompletion, ExpensePlanStatus, FinanceAccount, FinanceDebt, FinanceIndex, FinanceMonthSummary, FinanceTransaction, FinanceTransfer, IncomePlan, IncomePlanCompletion, MonthSummaryCategory, PlannedTransfer, TransactionKind } from "./types";
 import { t } from "./i18n";
 import { normalizeAccountIcon } from "./core/account-icons";
 import { calculateDebtPayment } from "./core/debts";
+import { copyPlanDueDate } from "./core/planning";
 import { fromMinorUnits, hasSufficientFunds, isZeroMoney, toMinorUnits } from "./core/money";
 
 type Frontmatter = Record<string, unknown>;
@@ -20,7 +21,7 @@ export interface NewTransaction {
   debtId?: string;
 }
 
-export interface NewAccount { id?: string; name: string; icon: string; order?: number; }
+export interface NewAccount { id?: string; name: string; icon: string; kind?: AccountKind; order?: number; }
 export interface NewTransfer { id?: string; amount: number; date: Date; fromAccountId: string; toAccountId: string; comment?: string; externalId?: string; }
 export interface NewExpensePlan {
   id?: string;
@@ -134,10 +135,11 @@ export class TransactionStore {
     await ensureFolder(this.app, folder);
     const id = input.id ?? `account-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
     const icon = normalizeAccountIcon(input.icon);
-    const order = input.order ?? this.index.accounts.length;
+    const kind = input.kind ?? "envelope";
+    const order = input.order ?? this.index.accounts.filter((account) => account.kind === kind).length;
     const content = [
       "---", "finance_type: account", `finance_id: ${quote(id)}`,
-      `account_name: ${quote(input.name)}`, `icon: ${quote(icon)}`, `account_order: ${order}`, "---", "", `# ${input.name}`, "",
+      `account_name: ${quote(input.name)}`, `icon: ${quote(icon)}`, `account_kind: ${kind}`, `account_order: ${order}`, "---", "", `# ${input.name}`, "",
     ].join("\n");
     const path = normalizePath(`${folder}/${safeFileName(input.name)}.md`);
     await this.app.vault.create(await availablePath(this.app, path), content);
@@ -148,6 +150,7 @@ export class TransactionStore {
     await this.app.fileManager.processFrontMatter(account.file, (data) => {
       setFrontmatterValue(data, "account_name", input.name);
       setFrontmatterValue(data, "icon", normalizeAccountIcon(input.icon));
+      setFrontmatterValue(data, "account_kind", input.kind ?? account.kind);
     });
   }
 
@@ -157,8 +160,9 @@ export class TransactionStore {
   }
 
   async reorderAccounts(accountIds: string[]): Promise<void> {
-    const currentIds = this.index.accounts.map((account) => account.id);
-    if (accountIds.length !== currentIds.length || currentIds.some((id) => !accountIds.includes(id))) {
+    const kind = accountIds.length > 0 ? this.index.accounts.find((account) => account.id === accountIds[0])?.kind : undefined;
+    const currentIds = kind ? this.index.accounts.filter((account) => account.kind === kind).map((account) => account.id) : [];
+    if (!kind || accountIds.length !== currentIds.length || currentIds.some((id) => !accountIds.includes(id))) {
       throw new Error(t("Не удалось сохранить порядок счетов", "Could not save the account order"));
     }
     const byId = new Map(this.index.accounts.map((account) => [account.id, account]));
@@ -170,7 +174,7 @@ export class TransactionStore {
       });
       account.order = order;
     }
-    this.index.accounts.sort((left, right) => (left.order ?? Number.MAX_SAFE_INTEGER) - (right.order ?? Number.MAX_SAFE_INTEGER));
+    this.index.accounts.sort((left, right) => left.kind.localeCompare(right.kind) || (left.order ?? Number.MAX_SAFE_INTEGER) - (right.order ?? Number.MAX_SAFE_INTEGER));
     for (const listener of this.listeners) listener();
   }
 
@@ -239,6 +243,35 @@ export class TransactionStore {
       if (input.fundedByIncomePlanId) setFrontmatterValue(data, "funded_by_income", input.fundedByIncomePlanId);
       else deleteFrontmatterValue(data, "funded_by_income");
     });
+  }
+
+  async copyExpensePlansToMonth(plans: readonly ExpensePlan[], year: number, month: number): Promise<{ copied: number; skipped: number }> {
+    const targetPlans = this.index.plans.filter((plan) => plan.dueDate.getFullYear() === year && plan.dueDate.getMonth() === month);
+    let copied = 0;
+    let skipped = 0;
+    for (const plan of plans) {
+      const dueDate = copyPlanDueDate(plan.dueDate, year, month);
+      const day = dueDate.getDate();
+      const duplicate = targetPlans.some((target) =>
+        target.title === plan.title
+        && target.category === plan.category
+        && toMinorUnits(target.amount) === toMinorUnits(plan.amount)
+        && target.accountId === plan.accountId
+        && target.dueDate.getDate() === day);
+      if (duplicate) { skipped += 1; continue; }
+      await this.createExpensePlan({
+        title: plan.title,
+        amount: plan.amount,
+        dueDate,
+        category: plan.category,
+        accountId: plan.accountId,
+        completion: plan.completion,
+        status: "planned",
+        debtId: plan.debtId,
+      });
+      copied += 1;
+    }
+    return { copied, skipped };
   }
 
   async setExpensePlanFunding(plan: ExpensePlan, incomePlanId?: string): Promise<void> {
@@ -364,6 +397,30 @@ export class TransactionStore {
       if (input.fundedByIncomePlanId) setFrontmatterValue(data, "funded_by_income", input.fundedByIncomePlanId);
       else deleteFrontmatterValue(data, "funded_by_income");
     });
+  }
+
+  async copyPlannedTransfersToMonth(plans: readonly PlannedTransfer[], year: number, month: number): Promise<{ copied: number; skipped: number }> {
+    const targetPlans = this.index.plannedTransfers.filter((plan) => plan.dueDate.getFullYear() === year && plan.dueDate.getMonth() === month);
+    let copied = 0;
+    let skipped = 0;
+    for (const plan of plans) {
+      const dueDate = copyPlanDueDate(plan.dueDate, year, month);
+      const duplicate = targetPlans.some((target) =>
+        target.fromAccountId === plan.fromAccountId
+        && target.toAccountId === plan.toAccountId
+        && toMinorUnits(target.amount) === toMinorUnits(plan.amount)
+        && target.dueDate.getDate() === dueDate.getDate());
+      if (duplicate) { skipped += 1; continue; }
+      await this.createPlannedTransfer({
+        amount: plan.amount,
+        dueDate,
+        fromAccountId: plan.fromAccountId,
+        toAccountId: plan.toAccountId,
+        status: "planned",
+      });
+      copied += 1;
+    }
+    return { copied, skipped };
   }
 
   async setPlannedTransferFunding(plan: PlannedTransfer, incomePlanId?: string): Promise<void> {
@@ -575,10 +632,12 @@ function parseTransaction(file: TFile, data: Frontmatter): FinanceTransaction {
 
 function parseAccount(file: TFile, data: Frontmatter): FinanceAccount {
   const rawOrder = Number(data.account_order);
+  const rawKind = optionalString(data.account_kind);
   return {
     id: requiredString(data.finance_id, "finance_id"),
     name: requiredString(data.account_name, "account_name"),
     icon: normalizeAccountIcon(optionalString(data.icon)),
+    kind: rawKind === "savings" ? "savings" : "envelope",
     order: Number.isInteger(rawOrder) && rawOrder >= 0 ? rawOrder : undefined,
     balance: 0,
     file,
